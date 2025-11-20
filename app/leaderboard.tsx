@@ -1,49 +1,25 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   SafeAreaView,
   ScrollView,
   StyleProp,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
-  ViewStyle,
+  ViewStyle
 } from 'react-native';
 
-// --- Import SVG Assets ---
-import Qcoin from '../assets/images/Qcoin.svg'; // <-- 1. IMPORT YOUR NEW ICON
-import Coin from '../assets/images/coin.svg'; // This is for the '1.5X' and '1X'
+import { supabase } from '@/utils/supabase';
+import Qcoin from '../assets/images/Qcoin.svg';
+import Coin from '../assets/images/coin.svg';
 import WinMascot from '../assets/images/winMascot.svg';
 
 const PIXEL_FONT = 'monospace';
 
-// --- Mock Data based on your image ---
-const MOCK_LEADERBOARD = [
-  { rank: 1, name: 'Cheruvayal K.', score: 14000 },
-  { rank: 2, name: 'Sathyanara B', score: 12000 },
-  { rank: 3, name: 'Joseph M', score: 10000 },
-  { rank: 4, name: 'Murti C', score: 8000, isUser: true },
-  { rank: 5, name: 'Roymon K.A.', score: 6000 },
-  { rank: 6, name: 'Raghunathan P.', score: 5000 },
-  { rank: 7, name: 'Sasidharan', score: 3000 },
-  { rank: 8, name: 'Sujith S.U.', score: 1000 },
-];
-
-// --- Reusable Row Component ---
-const RankRow = ({
-  rank,
-  name,
-  score,
-  isUser = false,
-}: {
-  rank: number;
-  name: string;
-  score: number;
-  isUser?: boolean;
-}) => {
-  // Determine special styling
+const RankRow = ({ rank, name, score, isUser = false }: any) => {
   let cardStyle: StyleProp<ViewStyle> = styles.defaultCard;
   let numberStyle: StyleProp<ViewStyle> = styles.rankNumberContainer;
 
@@ -62,239 +38,112 @@ const RankRow = ({
   }
 
   return (
-    <TouchableOpacity style={[styles.rankCardBase, cardStyle]}>
+    <View style={[styles.rankCardBase, cardStyle]}>
       <View style={numberStyle}>
         <Text style={styles.rankNumber}>{rank}</Text>
       </View>
-      <Text style={styles.rankName}>{name}</Text>
+      <Text style={styles.rankName}>{name || 'Anonymous'}</Text>
       <View style={styles.scoreContainer}>
-        <Qcoin width={24} height={24} /> {/* <-- 2. USE YOUR NEW ICON HERE */}
+        <Qcoin width={24} height={24} />
         <Text style={styles.rankScore}>{score}</Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
 export default function LeaderboardScreen() {
-  const router = useRouter();
+  const [leaders, setLeaders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchLeaderboard = async () => {
+        try {
+          // 1. Get current user ID
+          const { data: { session } } = await supabase.auth.getSession();
+          setCurrentUser(session?.user?.id || null);
+
+          // 2. Fetch top 10 profiles sorted by XP
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, full_name, xp')
+            .order('xp', { ascending: false })
+            .limit(10);
+
+          if (error) throw error;
+          setLeaders(data || []);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchLeaderboard();
+    }, [])
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* --- Header Section --- */}
-        <View style={styles.headerContainer}>
-          <WinMascot width={100} height={100} style={styles.mascot} />
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>MONTHLY LEADERBOARD</Text>
-            <View style={styles.multiplierContainer}>
-              <Coin width={24} height={24} style={styles.coinIcon} />
-              <Text style={styles.multiplierText}>1.5X</Text>
+      {loading ? (
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.headerContainer}>
+            <WinMascot width={100} height={100} style={styles.mascot} />
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>TOP FARMERS</Text>
+              <View style={styles.multiplierContainer}>
+                <Coin width={24} height={24} style={styles.coinIcon} />
+                <Text style={styles.multiplierText}>XP LEAGUE</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* --- Leaderboard List --- */}
-        <View style={styles.listContainer}>
-          {MOCK_LEADERBOARD.map((user) => (
-            <React.Fragment key={user.rank}>
-              {/* --- 1X Multiplier Divider --- */}
-              {user.rank === 4 && (
-                <View style={styles.dividerContainer}>
-                  <View style={styles.dividerLine} />
-                  <View style={styles.dividerChip}>
-                    <Coin width={20} height={20} style={styles.coinIcon} />
-                    <Text style={styles.multiplierText}>1X</Text>
-                  </View>
-                  <View style={styles.dividerLine} />
-                </View>
-              )}
-              {/* --- Rank Row --- */}
+          <View style={styles.listContainer}>
+            {leaders.map((user, index) => (
               <RankRow
-                rank={user.rank}
-                name={user.name}
-                score={user.score}
-                isUser={user.isUser}
+                key={user.id}
+                rank={index + 1}
+                name={user.full_name}
+                score={user.xp}
+                isUser={user.id === currentUser}
               />
-            </React.Fragment>
-          ))}
-        </View>
-      </ScrollView>
+            ))}
+            {leaders.length === 0 && <Text style={{color: 'white', textAlign:'center'}}>No players yet!</Text>}
+          </View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1C1C1E',
-  },
-  scrollContainer: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  mascot: {
-    marginRight: 10,
-  },
-  headerText: {
-    flex: 1,
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-    fontFamily: PIXEL_FONT,
-    letterSpacing: 1,
-  },
-  multiplierContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(253, 216, 53, 0.1)',
-    borderColor: '#FDD835',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    // Glow
-    shadowColor: '#FDD835',
-    shadowOpacity: 0.7,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-  coinIcon: {
-    marginRight: 6,
-  },
-  multiplierText: {
-    color: '#FDD835',
-    fontSize: 18,
-    fontWeight: 'bold',
-    fontFamily: PIXEL_FONT,
-  },
-  listContainer: {
-    gap: 12, // Adds space between each row
-  },
-  // Base style for ALL cards
-  rankCardBase: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 30,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 2,
-    // Base glow for all special cards
-    shadowOpacity: 0.7,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  },
-  // --- Podium & User Styles ---
-  goldCard: {
-    backgroundColor: '#544607',
-    borderColor: '#FDD835',
-    shadowColor: '#FDD835',
-  },
-  silverCard: {
-    backgroundColor: '#4E5357',
-    borderColor: '#C0C0C0',
-    shadowColor: '#C0C0C0',
-  },
-  bronzeCard: {
-    backgroundColor: '#5C3A21',
-    borderColor: '#CD7F32',
-    shadowColor: '#CD7F32',
-  },
-  userCard: {
-    backgroundColor: '#1E3A5F', // Special blue for user
-    borderColor: '#0277BD',
-    shadowColor: '#0277BD',
-  },
-  // --- Default style for ranks 5+ ---
-  defaultCard: {
-    backgroundColor: '#333333',
-    borderColor: '#424242',
-    elevation: 0, // No glow
-    shadowOpacity: 0, // No glow
-  },
-  // --- Rank Number Styles ---
-  rankNumberContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  goldRankNumber: {
-    backgroundColor: 'rgba(253, 216, 53, 0.2)',
-    borderColor: 'rgba(253, 216, 53, 0.5)',
-  },
-  silverRankNumber: {
-    backgroundColor: 'rgba(192, 192, 192, 0.2)',
-    borderColor: 'rgba(192, 192, 192, 0.5)',
-  },
-  bronzeRankNumber: {
-    backgroundColor: 'rgba(205, 127, 50, 0.2)',
-    borderColor: 'rgba(205, 127, 50, 0.5)',
-  },
-  userRankNumber: {
-    backgroundColor: 'rgba(2, 119, 189, 0.2)',
-    borderColor: 'rgba(2, 119, 189, 0.5)',
-  },
-  rankNumber: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-    fontFamily: PIXEL_FONT,
-  },
-  rankName: {
-    flex: 1, // Take up remaining space
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '500',
-  },
-  scoreContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  rankScore: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    fontFamily: PIXEL_FONT,
-    marginLeft: 6,
-  },
-  // --- Divider Styles ---
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 14,
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#424242',
-  },
-  dividerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
+  container: { flex: 1, backgroundColor: '#1C1C1E' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContainer: { padding: 16, paddingBottom: 40 },
+  headerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 10 },
+  mascot: { marginRight: 10 },
+  headerText: { flex: 1 },
+  headerTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', fontFamily: PIXEL_FONT, letterSpacing: 1 },
+  multiplierContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(253, 216, 53, 0.1)', borderColor: '#FDD835', borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginTop: 8, alignSelf: 'flex-start' },
+  coinIcon: { marginRight: 6 },
+  multiplierText: { color: '#FDD835', fontSize: 18, fontWeight: 'bold', fontFamily: PIXEL_FONT },
+  listContainer: { gap: 12 },
+  rankCardBase: { flexDirection: 'row', alignItems: 'center', borderRadius: 30, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 2, elevation: 10 },
+  goldCard: { backgroundColor: '#544607', borderColor: '#FDD835' },
+  silverCard: { backgroundColor: '#4E5357', borderColor: '#C0C0C0' },
+  bronzeCard: { backgroundColor: '#5C3A21', borderColor: '#CD7F32' },
+  userCard: { backgroundColor: '#1E3A5F', borderColor: '#0277BD' },
+  defaultCard: { backgroundColor: '#333333', borderColor: '#424242' },
+  rankNumberContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12, borderWidth: 2, borderColor: 'transparent' },
+  goldRankNumber: { backgroundColor: 'rgba(253, 216, 53, 0.2)', borderColor: 'rgba(253, 216, 53, 0.5)' },
+  silverRankNumber: { backgroundColor: 'rgba(192, 192, 192, 0.2)', borderColor: 'rgba(192, 192, 192, 0.5)' },
+  bronzeRankNumber: { backgroundColor: 'rgba(205, 127, 50, 0.2)', borderColor: 'rgba(205, 127, 50, 0.5)' },
+  userRankNumber: { backgroundColor: 'rgba(2, 119, 189, 0.2)', borderColor: 'rgba(2, 119, 189, 0.5)' },
+  rankNumber: { color: 'white', fontSize: 20, fontWeight: 'bold', fontFamily: PIXEL_FONT },
+  rankName: { flex: 1, color: 'white', fontSize: 18, fontWeight: '500' },
+  scoreContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
+  rankScore: { color: 'white', fontSize: 16, fontWeight: 'bold', fontFamily: PIXEL_FONT, marginLeft: 6 },
 });
