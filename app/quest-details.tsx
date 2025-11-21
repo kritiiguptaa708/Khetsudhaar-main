@@ -1,341 +1,166 @@
+import { supabase } from '@/utils/supabase';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
-
-// --- Import SVG Assets ---
 import Coin from '../assets/images/Qcoin.svg';
 
 const PIXEL_FONT = 'monospace';
 
-// --- Mock Data for the Single Quest ---
-const QUEST_DETAILS = {
-    id: 'q1',
-    title: 'Sustainable Land Management', // The main quest title
-    reward: 1000,
-    rewardType: 'XP',
-    isCompleted: false, // The main quest status
-    whatToKnow: { 
-        landSize: 'About 0.1 acres (400 sq meters) with well-drained, loamy soil rich in organic matter.',
-    },
-    steps: [ // Represents the individual tasks to complete the quest
-        { text: 'Prepare Soil Naturally: Add compost or farmyard manure instead of chemical fertilizers to keep soil healthy.', completed: true }, // Set to true for demonstration
-        { text: 'Water Efficiently: Water plants early morning or late evening and use mulch to keep moisture in soil.', completed: true }, // Set to true for demonstration
-    ],
-    rewardDescription: 'You help keep your land fertile and save water while growing healthy bananas sustainably.', // The main quest reward text
-};
-
-/**
- * Helper component for each step in the quest.
- */
-const QuestStep: React.FC<{ text: string; completed: boolean }> = ({ text, completed }) => (
-    <View style={styles.stepContainer}>
-        <View style={[styles.stepIconBox, completed ? styles.stepCompleted : styles.stepActive]}>
-            <FontAwesome5 
-                name={completed ? 'check' : 'circle'} 
-                size={14} 
-                color={completed ? '#fff' : '#4CAF50'} 
-            />
-        </View>
-        <Text style={[styles.stepText, completed && styles.stepTextCompleted]}>{text}</Text>
-    </View>
-);
-
-// --- Main Screen Component ---
-export default function QuestsScreen() {
+export default function QuestDetailsScreen() {
     const router = useRouter();
+    const { id } = useLocalSearchParams(); 
+    
+    const [quest, setQuest] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [isCompleted, setIsCompleted] = useState(false);
 
-    const { title, reward, rewardType, whatToKnow, steps, isCompleted, rewardDescription } = QUEST_DETAILS;
-    const completedSteps = steps.filter(s => s.completed).length;
-    const totalSteps = steps.length;
-    const progressPercentage = (completedSteps / totalSteps) * 100;
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!id) return;
 
-    const handleActionButtonPress = () => {
-        // --- UPDATED LOGIC HERE ---
-        // If all steps are complete, navigate to the new Quiz page
-        if (completedSteps === totalSteps) {
-            router.push('/quest-quiz'); // <--- FIX: Was '/quiz'
+                // 1. Fetch Quest Info
+                const { data: questData, error } = await supabase
+                    .from('quests')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+                
+                if (error) throw error;
+                setQuest(questData);
+
+                // 2. Check Completion
+                if (session?.user?.id) {
+                    const { data } = await supabase
+                        .from('user_quests')
+                        .select('id')
+                        .eq('user_id', session.user.id)
+                        .eq('quest_id', id)
+                        .maybeSingle();
+                    if (data) setIsCompleted(true);
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
+    const handleAction = () => {
+        if (isCompleted) {
+            router.back();
         } else {
-            // Otherwise, navigate to lessons to complete the next step
-            router.push('/lessons');
+            // --- CRITICAL CHANGE: Go to Quiz for Verification ---
+            router.push({
+                pathname: '/quest-quiz',
+                params: { id: id } // Pass the Quest ID to the quiz
+            });
         }
-    }
+    };
+
+    if (loading) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
+    if (!quest) return <SafeAreaView style={styles.loadingContainer}><Text style={{color:'white'}}>Quest not found.</Text></SafeAreaView>;
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style="light" />
-            
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 
-                {/* --- Main Quest Card: Title and Progress --- */}
+                {/* Main Card */}
                 <View style={styles.mainCard}>
                     <View style={styles.titleRow}>
-                        <FontAwesome5 name="seedling" size={28} color="#4CAF50" style={styles.trophyIcon} />
-                        <Text style={styles.questTitle}>{title}</Text>
+                        <FontAwesome5 name="seedling" size={24} color="#4CAF50" style={{marginRight: 10}} />
+                        <Text style={styles.questTitle}>{quest.title}</Text>
                     </View>
-                    
                     <View style={styles.rewardBox}>
-                        <Text style={styles.rewardText}>XP REWARD:</Text>
+                        <Text style={styles.rewardLabel}>REWARD:</Text>
                         <Coin width={20} height={20} />
-                        <Text style={styles.rewardValue}>{reward} {rewardType}</Text>
+                        <Text style={styles.rewardValue}>{quest.xp_reward} XP</Text>
                     </View>
-                    
-                    <Text style={styles.progressLabel}>PROGRESS: {completedSteps}/{totalSteps}</Text>
-                    <View style={styles.progressBarBackground}>
-                        <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                    <Text style={styles.statusText}>STATUS: {isCompleted ? 'COMPLETED' : 'PENDING VERIFICATION'}</Text>
+                    <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: isCompleted ? '100%' : '0%' }]} />
                     </View>
                 </View>
 
-                {/* --- "What You Need to Know" Section --- */}
+                {/* Info */}
                 <View style={styles.infoSection}>
-                    <Text style={styles.infoTitle}>What You Need to Know</Text>
-                    <Text style={styles.infoText}>{whatToKnow.landSize}</Text>
+                    <Text style={styles.sectionTitle}>MISSION BRIEF</Text>
+                    <Text style={styles.descriptionText}>{quest.description}</Text>
                 </View>
 
-
-                {/* --- Quest Steps Section (Tasks to Complete) --- */}
+                {/* Steps (Static for now, or dynamic if you add a steps column) */}
                 <View style={styles.stepsSection}>
-                    <Text style={styles.stepsHeader}>Tasks to Complete</Text>
-                    <View style={styles.stepsList}>
-                        {steps.map((step, index) => (
-                            <QuestStep key={index} {...step} />
-                        ))}
+                    <Text style={styles.sectionTitle}>TASKS</Text>
+                    <View style={styles.stepRow}>
+                        <FontAwesome5 name={isCompleted ? "check-circle" : "circle"} size={16} color={isCompleted ? "#4CAF50" : "#888"} />
+                        <Text style={styles.stepText}>Complete the learning module</Text>
+                    </View>
+                    <View style={styles.stepRow}>
+                        <FontAwesome5 name={isCompleted ? "check-circle" : "circle"} size={16} color={isCompleted ? "#4CAF50" : "#888"} />
+                        <Text style={styles.stepText}>Pass the verification quiz</Text>
                     </View>
                 </View>
 
-                {/* --- QUEST ACTION CARD --- */}
-                <View style={styles.actionCard}>
-                    <View style={styles.cardHeader}>
-                        <Coin width={40} height={40} /> 
-                        <View style={styles.cardHeaderTextContainer}>
-                            <Text style={styles.cardTitle}>QUEST REWARD</Text>
-                            <Text style={styles.cardSubtitle}>{rewardDescription}</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.cardDivider} />
-
+                {/* Action Button */}
+                <View style={styles.actionContainer}>
+                    <View style={styles.divider} />
                     <TouchableOpacity 
-                        style={styles.actionButton} 
-                        onPress={handleActionButtonPress}
+                        style={[styles.actionButton, isCompleted && styles.actionButtonCompleted]} 
+                        onPress={handleAction}
                     >
                         <Text style={styles.actionButtonText}>
-                            {completedSteps === totalSteps ? 'COMPLETE QUEST QUIZ' : 'CONTINUE LEARNING'}
+                            {isCompleted ? 'QUEST COMPLETED' : 'TAKE QUIZ TO VERIFY'}
                         </Text>
+                        {!isCompleted && <FontAwesome5 name="arrow-right" size={16} color="white" style={{marginLeft: 10}} />}
                     </TouchableOpacity>
                 </View>
-                
+
             </ScrollView>
         </SafeAreaView>
     );
 }
-// --- Styles (No changes) ---
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#151718', // Dark background
-    },
-    scrollContainer: {
-        paddingHorizontal: 15,
-        paddingVertical: 20,
-    },
-    // --- Main Card Styles ---
-    mainCard: {
-        backgroundColor: '#2C2C2E',
-        borderRadius: 20,
-        padding: 25,
-        marginBottom: 20,
-        borderWidth: 2,
-        borderColor: '#4CAF50', // Green border
-    },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
-    trophyIcon: {
-        marginRight: 10,
-        color: '#FFD700',
-    },
-    questTitle: {
-        color: 'white',
-        fontSize: 24,
-        fontWeight: 'bold',
-        fontFamily: PIXEL_FONT,
-    },
-    rewardBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        backgroundColor: 'rgba(255, 215, 0, 0.1)',
-        borderRadius: 10,
-        marginBottom: 15,
-    },
-    rewardText: {
-        color: '#00ff51ff',
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginRight: 5,
-    },
-    rewardValue: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: '900',
-        marginLeft: 5,
-        fontFamily: PIXEL_FONT,
-    },
-    progressLabel: {
-        color: '#B0B0B0',
-        fontSize: 14,
-        marginBottom: 8,
-    },
-    progressBarBackground: {
-        height: 10,
-        backgroundColor: '#383838',
-        borderRadius: 5,
-        overflow: 'hidden',
-        marginBottom: 10,
-    },
-    progressBarFill: {
-        height: '100%',
-        backgroundColor: '#4CAF50', // Green
-        borderRadius: 5,
-    },
 
-    // --- Info Section Styles ---
-    infoSection: {
-        backgroundColor: '#2C2C2E',
-        borderRadius: 15,
-        padding: 20,
-        marginBottom: 20,
-        borderLeftWidth: 5,
-        borderLeftColor: '#3498DB', // Blue for info
-    },
-    infoTitle: {
-        color: '#3498DB', // Blue
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    infoText: {
-        color: '#DEDEDE',
-        fontSize: 16,
-        lineHeight: 22,
-    },
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#151718' },
+    loadingContainer: { flex: 1, backgroundColor: '#151718', justifyContent: 'center', alignItems: 'center' },
+    scrollContainer: { padding: 20 },
     
-    // --- Steps Styles ---
-    stepsSection: {
-        marginBottom: 30,
-    },
-    stepsHeader: {
-        color: '#4CAF50',
-        fontSize: 20,
-        fontWeight: 'bold',
-        fontFamily: PIXEL_FONT,
-        marginBottom: 15,
-        borderBottomWidth: 1,
-        borderColor: '#444444',
-        paddingBottom: 5,
-    },
-    stepsList: {
-        gap: 15,
-    },
-    stepContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-    },
-    stepIconBox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 15,
-        borderWidth: 2,
-        flexShrink: 0,
-    },
-    stepActive: {
-        borderColor: '#4CAF50',
-        backgroundColor: '#2C2C2E',
-    },
-    stepCompleted: {
-        borderColor: '#4CAF50',
-        backgroundColor: '#4CAF50',
-    },
-    stepText: {
-        color: 'white',
-        fontSize: 16,
-        flex: 1,
-    },
-    stepTextCompleted: {
-        color: '#9E9E9E',
-        textDecorationLine: 'line-through',
-    },
-    
-    // --- QUEST ACTION CARD STYLES ---
-    actionCard: {
-        backgroundColor: '#2C2C2E',
-        borderRadius: 15,
-        padding: 20,
-        borderWidth: 2,
-        borderColor: '#00ff62ff', // Gold border
-        marginBottom: 30,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    cardHeaderTextContainer: {
-        flex: 1,
-        marginLeft: 15,
-    },
-    cardTitle: {
-        color: '#FFD700',
-        fontSize: 20,
-        fontWeight: 'bold',
-        fontFamily: PIXEL_FONT,
-        marginBottom: 4,
-    },
-    cardSubtitle: {
-        color: '#DEDEDE',
-        fontSize: 14,
-        lineHeight: 20,
-    },
-    cardDivider: {
-        height: 1,
-        backgroundColor: '#444444',
-        marginVertical: 15,
-    },
-    actionButton: {
-        flexDirection: 'row',
-        backgroundColor: '#4CAF50', 
-        paddingVertical: 15,
-        paddingHorizontal: 25,
-        borderRadius: 30,
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        shadowColor: '#388E3C', // Green shadow
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 5,
-        elevation: 8,
-    },
-    actionButtonText: {
-        color: 'white', 
-        fontSize: 18,
-        fontWeight: 'bold',
-        fontFamily: PIXEL_FONT,
-        letterSpacing: 1,
-    },
+    mainCard: { backgroundColor: '#2C2C2E', borderRadius: 20, padding: 20, marginBottom: 25, borderWidth: 2, borderColor: '#4CAF50' },
+    titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+    questTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', fontFamily: PIXEL_FONT, flex: 1 },
+    rewardBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.1)', padding: 10, borderRadius: 10, marginBottom: 15 },
+    rewardLabel: { color: '#4CAF50', fontWeight: 'bold', marginRight: 5 },
+    rewardValue: { color: 'white', fontWeight: '900', marginLeft: 5, fontFamily: PIXEL_FONT },
+    statusText: { color: '#B0B0B0', fontSize: 12, marginBottom: 8, fontFamily: PIXEL_FONT },
+    progressBarBg: { height: 8, backgroundColor: '#333', borderRadius: 4 },
+    progressBarFill: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 4 },
+
+    infoSection: { marginBottom: 25 },
+    sectionTitle: { color: '#3498DB', fontSize: 16, fontWeight: 'bold', fontFamily: PIXEL_FONT, marginBottom: 10, textTransform: 'uppercase' },
+    descriptionText: { color: '#DEDEDE', fontSize: 16, lineHeight: 24 },
+
+    stepsSection: { marginBottom: 30 },
+    stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, paddingLeft: 10 },
+    stepText: { color: '#EEE', marginLeft: 10, fontSize: 15 },
+
+    actionContainer: { marginTop: 10 },
+    divider: { height: 1, backgroundColor: '#333', marginBottom: 20 },
+    actionButton: { flexDirection: 'row', backgroundColor: '#FFC107', paddingVertical: 16, borderRadius: 30, alignItems: 'center', justifyContent: 'center', shadowColor: '#FFC107', shadowOpacity: 0.4, shadowRadius: 10, elevation: 5 },
+    actionButtonCompleted: { backgroundColor: '#333', shadowOpacity: 0, borderWidth: 1, borderColor: '#555' },
+    actionButtonText: { color: '#151718', fontSize: 16, fontWeight: 'bold', fontFamily: PIXEL_FONT },
 });
