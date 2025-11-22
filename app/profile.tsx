@@ -1,5 +1,5 @@
 import { FontAwesome5 } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker'; 
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useState } from 'react';
@@ -22,8 +22,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
 
-import { supabase } from '@/utils/supabase';
 import { useTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/utils/supabase';
 
 // --- Assets ---
 import Coin from '../assets/images/coin.svg';
@@ -35,7 +35,18 @@ import WinMascot from '../assets/images/winMascot.svg';
 
 const PIXEL_FONT = 'monospace';
 
-// --- 1. CUSTOM ANIMATED GAUGE (Pass t for translation) ---
+// --- HELPER: Base64 Decoder ---
+const decode = (base64: string) => {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+};
+
+// --- 1. CUSTOM ANIMATED GAUGE ---
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const SustainabilityGauge = ({ t, score }: { t: (key: any) => string, score: string }) => {
@@ -137,20 +148,74 @@ export default function ProfileScreen() {
     }, [])
   );
   
-  // --- REAL IMAGE UPLOAD LOGIC ---
+  // --- REAL IMAGE UPLOAD LOGIC (RESTORED) ---
   const handleImageUpload = async () => {
-    // ... (logic remains the same)
-  };
+    try {
+      setUploading(true);
 
-  // Helper for base64 decoding
-  const decode = (base64: string) => {
-    const binaryString = atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      // 1. Pick Image
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true, // Needed for upload
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        setUploading(false);
+        return;
+      }
+
+      const image = result.assets[0];
+      if (!image.base64) {
+        Alert.alert("Error", "Image data missing.");
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const userId = session.user.id;
+
+      // 2. Upload to Supabase Storage
+      const fileExt = image.uri.split('.').pop()?.toLowerCase() ?? 'jpeg';
+      const fileName = `${userId}/avatar.${fileExt}`;
+      const fileData = decode(image.base64);
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars') // Ensure this bucket exists in Supabase!
+        .upload(fileName, fileData, {
+          contentType: image.mimeType ?? 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 3. Get Public URL
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Add timestamp to force UI refresh
+      const publicUrl = `${urlData.publicUrl}?t=${new Date().getTime()}`;
+
+      // 4. Update Profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+
+      setProfile({ ...profile, avatar_url: publicUrl });
+      Alert.alert("Success", "Profile picture updated!");
+
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      Alert.alert("Upload Failed", error.message || "Unknown error");
+    } finally {
+      setUploading(false);
     }
-    return bytes.buffer;
   };
 
   const handleLogout = async () => {
@@ -214,7 +279,7 @@ export default function ProfileScreen() {
           <XPBar current={xpProgress} max={1000} level={level} />
         </View>
 
-        {/* STATS - USE TRANSLATION */}
+        {/* STATS */}
         <View style={styles.gridContainer}>
           <StatCard label={t('wealth')} value={String(profile.coins || 0)} icon={<Coin width={20} height={20} />} />
           <StatCard label={t('multiplier')} value={`x${multiplier.toFixed(1)}`} icon={<Qcoin width={20} height={20} />} />
