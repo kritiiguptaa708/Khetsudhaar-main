@@ -1,6 +1,6 @@
 import { useTranslation } from '@/hooks/useTranslation';
 import { supabase } from '@/utils/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <--- Added
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -34,7 +34,7 @@ export default function CropScreen() {
   const handleConfirm = async () => { 
     if (selectedCrop) {
       try {
-        // 1. Save crop to Local Storage for Onboarding Check
+        // 1. Save crop to Local Storage
         await AsyncStorage.setItem('onboarding_crop', selectedCrop);
 
         // 2. (Optional) Save crop to DB if logged in
@@ -46,9 +46,8 @@ export default function CropScreen() {
             .eq('id', session.user.id);
         }
 
-        // 3. Navigate to Step 3: First Quest (ID: 1)
-        // Make sure Quest 1 exists in your Supabase 'quests' table!
-        router.replace({ pathname: '/quest-details', params: { id: '1' } }); 
+        // 3. Navigate to Step 3: First LESSON (ID: 1) - CHANGED ROUTING
+        router.replace({ pathname: '/lesson/[id]', params: { id: '1' } }); 
 
       } catch (error) {
         console.error('Error saving crop:', error);

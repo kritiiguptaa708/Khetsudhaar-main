@@ -31,11 +31,10 @@ export default function Index() {
       } else if (!crop) {
         setNextScreen('/crop');     // Step 2: User hasn't chosen crop
       } else if (!rewardClaimed) {
-        // Step 3: Send to First Quest (ID 1)
-        // Ensure you have a quest with id=1 in your database!
-        setNextScreen('/quest-details?id=1'); 
+        // Step 3: Send to First LESSON (ID 1) - CHANGED FROM QUEST-DETAILS
+        setNextScreen('/lesson/1'); 
       } else {
-        setNextScreen('/login');    // Step 4: Finished quest, needs to login
+        setNextScreen('/login');    // Step 4: Finished flow, needs to login
       }
     } catch (e) {
       console.error("Onboarding check failed", e);

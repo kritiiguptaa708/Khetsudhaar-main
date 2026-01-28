@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/utils/supabase'; // <--- ADD THIS IMPORT
 import Checkmark from '../../assets/images/check.svg';
 import Coin from '../../assets/images/coin.svg';
 
@@ -27,9 +28,18 @@ export default function LessonCompleteScreen() {
 
   const lesson = LESSON_INFO[id] || { title: 'Lesson Completed', points: 1000 };
 
-  const handleContinue = () => {
-    // Go back to Lessons List to continue progress
-    router.replace('/lessons');
+  const handleContinue = async () => {
+    // 1. Check if user is logged in
+    const { data: { session } } = await supabase.auth.getSession();
+    const isGuest = !session;
+
+    // 2. Logic: Only send to Reward/Login if it's Lesson 1 AND they are a Guest
+    if (isGuest && id === '1') {
+      router.replace({ pathname: '/reward/[id]', params: { id: id } });
+    } else {
+      // Otherwise (Logged in user OR different lesson), go to Lessons list
+      router.replace('/lessons');
+    }
   };
 
   return (

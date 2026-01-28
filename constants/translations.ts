@@ -22,6 +22,7 @@ export type TranslationKeys =
   | 'create_one'
   | 'dont_have_account'
   | 'already_have_account'
+  | 'login_here' // <--- ADDED THIS
   | 'data_note'
   | 'take_quiz'
   | 'take_quiz_to_verify'
@@ -57,7 +58,6 @@ export type TranslationKeys =
   | 'claim_reward'
   | 'completed'
   | 'completed_lesson_title'
-  // --- NEW KEYS REQUIRED FOR OFFLINE & MARKET FEATURES ---
   | 'offline_mode'
   | 'save'
   | 'saving'
@@ -71,7 +71,6 @@ export type TranslationKeys =
   | 'no_data'
   | 'no_crops'
   | 'avg_mandi_price'
-  // --- MISSING KEYS FIXED ---
   | 'mission_complete'
   | 'great_job'
   | 'quest_complete';
@@ -79,7 +78,6 @@ export type TranslationKeys =
 // Define the structure of the translations
 type Translations = Record<TranslationKeys, string>;
 
-// Use the language code (id) stored in your Supabase profile table
 interface LanguageMap {
   [key: string]: Translations;
 }
@@ -109,6 +107,7 @@ const translations: LanguageMap = {
     create_one: 'Create one',
     dont_have_account: "Don't have an account?",
     already_have_account: "Already have an account?",
+    login_here: "Login here", // <--- ADDED
     data_note: "DATA AS PER FARMER REGISTRY 2025",
     take_quiz: 'TAKE QUIZ',
     take_quiz_to_verify: 'TAKE QUIZ TO VERIFY',
@@ -186,6 +185,7 @@ const translations: LanguageMap = {
     create_one: 'एक बनाओ',
     dont_have_account: "खाता नहीं है?",
     already_have_account: "पहले से ही खाता है?",
+    login_here: "यहाँ लॉगिन करें", // <--- ADDED
     data_note: "किसान रजिस्ट्री 2025 के अनुसार डेटा",
     take_quiz: 'क्विज लें',
     take_quiz_to_verify: 'पुष्टि के लिए क्विज लें',
@@ -263,6 +263,7 @@ const translations: LanguageMap = {
     create_one: 'Create one',
     dont_have_account: "Account nahi hai?",
     already_have_account: "Pehle hi account hai?",
+    login_here: "Ethe login karo", // <--- ADDED
     data_note: "KISAN REGISTRY 2025 DATA",
     take_quiz: 'QUIZ DAO',
     take_quiz_to_verify: 'CHECK LAYI QUIZ DAO',
@@ -340,6 +341,7 @@ const translations: LanguageMap = {
     create_one: 'പുതിയത് ഉണ്ടാക്കൂ',
     dont_have_account: "അക്കൗണ്ട് ഇല്ലേ?",
     already_have_account: "അക്കൗണ്ട് ഉണ്ടോ?",
+    login_here: "ഇവിടെ ലോഗിൻ ചെയ്യുക", // <--- ADDED
     data_note: "കർഷക രജിസ്ട്രി 2025 പ്രകാരം",
     take_quiz: 'ക്വിസ് എടുക്കുക',
     take_quiz_to_verify: 'പരിശോധിക്കാൻ ക്വിസ് എടുക്കുക',
