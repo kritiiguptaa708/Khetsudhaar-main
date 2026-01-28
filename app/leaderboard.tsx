@@ -12,13 +12,15 @@ import {
   ViewStyle
 } from 'react-native';
 
-import { supabase } from '@/utils/supabase';
 import { useTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/utils/supabase';
 import Qcoin from '../assets/images/Qcoin.svg';
 import Coin from '../assets/images/coin.svg';
 import WinMascot from '../assets/images/winMascot.svg';
 
-const PIXEL_FONT = 'monospace';
+import { Platform } from 'react-native';
+// Uses San Francisco on iOS and Roboto on Android
+const PIXEL_FONT = Platform.OS === 'ios' ? 'System' : 'Roboto';
 
 // Helper to calculate score with multiplier
 const calculateScore = (coins: number, questCoins: number) => {
@@ -72,42 +74,47 @@ export default function LeaderboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const fetchLeaderboard = async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const currentId = session?.user?.id;
+      // REPLACE your fetchLeaderboard function with this:
 
-          // 1. Fetch all profiles (In production, use a Database Function to sort)
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('id, full_name, coins, quest_coins');
+const fetchLeaderboard = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentId = session?.user?.id;
 
-          if (error) throw error;
+    // FEAT: Fetch only the top 50 pre-calculated rows from the Database View
+    // This is instant, even with 1 million users.
+    const { data, error } = await supabase
+      .from('leaderboard_view')
+      .select('*')
+      .limit(50);
 
-          // 2. Calculate Scores Client-Side (Temporary solution)
-          const rankedUsers = (data || []).map(user => {
-            const qCoins = user.quest_coins || 0;
-            const coins = user.coins || 0;
-            const multiplier = 1 + (qCoins * 0.2);
-            const finalScore = Math.floor(coins * multiplier);
-            
-            return { ...user, finalScore, multiplier };
-          })
-          .sort((a, b) => b.finalScore - a.finalScore) // Sort descending
-          .slice(0, 50); // Top 50
+    if (error) throw error;
 
-          setLeaders(rankedUsers);
-          
-          if (currentId) {
-            setCurrentUserData(rankedUsers.find(u => u.id === currentId));
-          }
+    setLeaders(data || []);
+    
+    // Find current user's rank efficiently
+    if (currentId) {
+      // If user is in top 50, find them there
+      let userEntry = data?.find(u => u.id === currentId);
+      
+      // If user is NOT in top 50, fetch just their specific row
+      if (!userEntry) {
+        const { data: userData } = await supabase
+          .from('leaderboard_view')
+          .select('*')
+          .eq('id', currentId)
+          .single();
+        userEntry = userData;
+      }
+      setCurrentUserData(userEntry);
+    }
 
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setLoading(false);
-        }
-      };
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+  } finally {
+    setLoading(false);
+  }
+};
       fetchLeaderboard();
     }, [])
   );

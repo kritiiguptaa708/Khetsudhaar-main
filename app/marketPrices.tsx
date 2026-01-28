@@ -25,7 +25,9 @@ const RiceImg = require('../assets/images/crops/rice.png');
 const GingerImg = require('../assets/images/crops/ginger.png');
 const CashewImg = require('../assets/images/crops/cashew.png');
 
-const PIXEL_FONT = 'monospace';
+import { Platform } from 'react-native';
+// Uses San Francisco on iOS and Roboto on Android
+const PIXEL_FONT = Platform.OS === 'ios' ? 'System' : 'Roboto';
 
 export default function MarketPricesScreen() {
   const [prices, setPrices] = useState<any[]>([]);

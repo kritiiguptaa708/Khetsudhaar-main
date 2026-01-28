@@ -59,38 +59,29 @@ export default function QuizScreen() {
         setResultState(isCorrect ? 'correct' : 'incorrect');
 
         if (isCorrect) {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    const userId = session.user.id;
+    try {
+        // --- SECURE FIX: Call the Database RPC Function ---
+        const { data, error } = await supabase.rpc('complete_quest', { 
+            quest_id_input: quizData.id 
+        });
 
-                    // 1. Mark Quest as Done
-                    await supabase.from('user_quests').insert({ 
-                        user_id: userId, 
-                        quest_id: quizData.id 
-                    });
-
-                    // 2. AWARD XP & QUEST COINS (THE NEW LOGIC)
-                    const { data: profile } = await supabase
-                        .from('profiles')
-                        .select('xp, quest_coins')
-                        .eq('id', userId)
-                        .single();
-
-                    if (profile) {
-                        const newXP = (profile.xp || 0) + (quizData.xp_reward || 0);
-                        const newQuestCoins = (profile.quest_coins || 0) + 1; // Award 1 quest coin for completion
-
-                        await supabase
-                            .from('profiles')
-                            .update({ xp: newXP, quest_coins: newQuestCoins })
-                            .eq('id', userId);
-                    }
-                }
-            } catch (err) {
-                console.error("Save error", err);
-            }
+        if (error) {
+            console.error("Error completing quest:", error);
+            Alert.alert("Error", "Could not save progress. You may have already completed this quest.");
+            // If error, we shouldn't let them proceed as if they won
+            setResultState('none'); 
+            return;
         } 
+        
+        // If data is false, it means the SQL function said "User already did this"
+        if (data === false) {
+            console.log("Quest was already completed previously.");
+        }
+
+    } catch (err) {
+        console.error("Save error", err);
+    }
+}
         setIsSubmitting(false);
     };
 

@@ -14,17 +14,30 @@ import {
   View
 } from 'react-native';
 
-import { supabase } from '@/utils/supabase';
 import { useTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/utils/supabase'; //
 import UserIcon from '../assets/images/user.svg';
 
+// Robust profile creation with better error logging
 const upsertProfile = async (userId: string, fullName: string, mobileNo: string, agriStackId: string) => {
-  const { error } = await supabase.from('profiles').upsert(
-    { id: userId, full_name: fullName, mobile_no: mobileNo, agristack_id: agriStackId },
-    { onConflict: 'id' }
-  );
-  if (error) console.error('Error upserting profile:', error);
-  return true;
+  try {
+    const { error } = await supabase.from('profiles').upsert(
+      { 
+        id: userId, 
+        full_name: fullName, 
+        mobile_no: mobileNo, 
+        agristack_id: agriStackId,
+        // Initialize default coins here if not handled by DB default
+        coins: 0 
+      },
+      { onConflict: 'id' }
+    );
+    if (error) throw error;
+    return true;
+  } catch (error: any) {
+    console.error('Error upserting profile:', error.message);
+    return false;
+  }
 };
 
 export default function SignupScreen() { 
@@ -50,20 +63,40 @@ export default function SignupScreen() {
       setIsLoading(true);
       const emailToRegister = getEmailFromUsername(username);
       
+      // 1. Create User & Pass ALL Metadata (Crucial for Triggers)
       const { data, error } = await supabase.auth.signUp({
         email: emailToRegister,
         password: password,
-        options: { data: { full_name: fullName, username: username } }
+        options: { 
+          data: { 
+            full_name: fullName, 
+            username: username,
+            mobile_no: mobileNo,       // <--- ADDED
+            agristack_id: agriStackId  // <--- ADDED
+          } 
+        }
       });
 
       if (error) {
         setIsLoading(false);
         Alert.alert('Registration Error', error.message);
       } else if (data.session && data.user) {
-         await upsertProfile(data.user.id, fullName, mobileNo, agriStackId);
+         // 2. Double Safety: Attempt to write profile manually in case Trigger is missing
+         const profileSuccess = await upsertProfile(data.user.id, fullName, mobileNo, agriStackId);
+         
          setIsLoading(false);
-         router.replace({ pathname: '/lessons', params: { lesson_completed: lesson_completed } });
+         
+         if (profileSuccess) {
+            router.replace({ pathname: '/lessons', params: { lesson_completed: lesson_completed } });
+         } else {
+            // If profile failed but auth worked, we still let them in, but warn them.
+            // (The Trigger below will prevent this state entirely)
+            Alert.alert("Account Created", "Welcome! Please verify your profile details in the settings.", [
+                { text: "OK", onPress: () => router.replace('/lessons') }
+            ]);
+         }
       } else {
+        // Handle "Email Confirmation Required" case (if enabled in Supabase)
         setIsLoading(false);
         Alert.alert('Success', 'Account created! Please log in.');
         router.replace('/login');
@@ -88,14 +121,19 @@ export default function SignupScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>{t('signup')}</Text> 
         <View style={styles.avatarContainer}><UserIcon width={100} height={100} /></View>
+        
         <Text style={styles.inputLabel}>FULL NAME</Text>
         <TextInput style={styles.input as StyleProp<TextStyle>} placeholder="Enter full name" placeholderTextColor="#A0A0A0" value={fullName} onChangeText={setFullName} />
+        
         <Text style={styles.inputLabel}>{t('username')}</Text>
         <TextInput style={styles.input as StyleProp<TextStyle>} placeholder="Create username" placeholderTextColor="#A0A0A0" autoCapitalize="none" value={username} onChangeText={setUsername} />
+        
         <Text style={styles.inputLabel}>{t('password')}</Text>
         <TextInput style={styles.input as StyleProp<TextStyle>} placeholder="Create password" placeholderTextColor="#A0A0A0" secureTextEntry value={password} onChangeText={setPassword} />
+        
         <Text style={styles.inputLabel}>MOBILE NO.</Text>
         <TextInput style={styles.input as StyleProp<TextStyle>} placeholder="Enter phone no." placeholderTextColor="#A0A0A0" keyboardType="numeric" maxLength={10} value={mobileNo} onChangeText={setMobileNo} />
+        
         <Text style={styles.inputLabel}>AGRISTACK ID</Text>
         <TextInput style={styles.input as StyleProp<TextStyle>} placeholder="Enter agristack id" placeholderTextColor="#A0A0A0" value={agriStackId} onChangeText={setAgriStackId} />
         
