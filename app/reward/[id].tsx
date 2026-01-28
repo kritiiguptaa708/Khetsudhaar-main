@@ -11,43 +11,46 @@ import {
   View
 } from 'react-native';
 
-// --- Assets ---
 import RewardMascot from '../../assets/images/RewardMascot.svg';
 import FacebookIcon from '../../assets/images/facebook.svg';
 import InstagramIcon from '../../assets/images/instagram.svg';
 import WhatsAppIcon from '../../assets/images/whatsapp.svg';
 import XIcon from '../../assets/images/x-twitter.svg';
 
-const REWARD_DATA: { [key: string]: any } = {
-  '1': { percentage: '10%', item: 'FERTILIZER PURCHASE' },
-  '2': { percentage: '20%', item: 'COMPOSTING TOOLS' },
-  'default': { percentage: '5%', item: 'FARM SUPPLIES' }
-};
-
 export default function RewardScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [isGuest, setIsGuest] = useState(true);
   const [loading, setLoading] = useState(true);
-
-  const reward = REWARD_DATA[id] || REWARD_DATA['default'];
+  const [rewardData, setRewardData] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const init = async () => {
+      // 1. Check Session
+      const { data: { session } } = await supabase.auth.getSession();
       setIsGuest(!session);
+
+      // 2. Fetch Reward Data Dynamically
+      if (id) {
+        const { data, error } = await supabase
+          .from('rewards')
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (data) {
+          setRewardData(data);
+        }
+      }
       setLoading(false);
-    });
-  }, []);
+    };
+    init();
+  }, [id]);
 
   const handleContinue = () => {
     if (isGuest) {
-      // Send Guest to Login (which links to Signup)
-      router.replace({
-        pathname: '/login',
-        params: { lesson_completed: id },
-      });
+      router.replace({ pathname: '/login', params: { lesson_completed: id } });
     } else {
-      // Logged in user goes to Dashboard
       router.replace('/dashboard'); 
     }
   };
@@ -60,6 +63,10 @@ export default function RewardScreen() {
     );
   }
 
+  // Fallback if data fetch fails
+  const percentage = rewardData?.discount_percentage || '5%';
+  const item = rewardData?.discount_item || 'SUPPLIES';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -70,8 +77,8 @@ export default function RewardScreen() {
             <RewardMascot width={200} height={200} />
           </View>
           
-          <Text style={styles.rewardTextLarge}>YOU WON {reward.percentage} OFF!!</Text>
-          <Text style={styles.rewardTextSmall}>ON {reward.item}</Text>
+          <Text style={styles.rewardTextLarge}>YOU WON {percentage} OFF!!</Text>
+          <Text style={styles.rewardTextSmall}>ON {item}</Text>
         </View>
 
         <View style={styles.shareSection}>
@@ -110,44 +117,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#444'
   },
-  congratulationsText: { 
-    color: '#FDD835', 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    letterSpacing: 2, 
-    fontFamily: 'monospace' 
-  },
-  imageContainer: { 
-    width: '90%', 
-    aspectRatio: 1, 
-    backgroundColor: '#D7C3A0',
-    borderRadius: 15, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 15 
-  },
-  rewardTextLarge: { 
-    color: '#FFFFFF', 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    textAlign: 'center', 
-    marginTop: 10, 
-    letterSpacing: 1.5, 
-    fontFamily: 'monospace' 
-  },
-  rewardTextSmall: { 
-    color: '#D0D0D0', 
-    fontSize: 18, 
-    fontWeight: '500', 
-    textAlign: 'center', 
-    marginBottom: 10, 
-    fontFamily: 'monospace' 
-  },
+  congratulationsText: { color: '#FDD835', fontSize: 24, fontWeight: 'bold', marginBottom: 20, letterSpacing: 2, fontFamily: 'monospace' },
+  imageContainer: { width: '90%', aspectRatio: 1, backgroundColor: '#D7C3A0', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  rewardTextLarge: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginTop: 10, letterSpacing: 1.5, fontFamily: 'monospace' },
+  rewardTextSmall: { color: '#D0D0D0', fontSize: 18, fontWeight: '500', textAlign: 'center', marginBottom: 10, fontFamily: 'monospace' },
   shareSection: { backgroundColor: '#333333', width: '100%', maxWidth: 400, borderRadius: 20, padding: 20, alignItems: 'center', marginBottom: 20 },
   shareTitle: { color: '#FDD835', fontSize: 16, fontWeight: 'bold', marginBottom: 15, letterSpacing: 1, fontFamily: 'monospace' },
   socialIconsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '80%' },
-  
   continueButton: { backgroundColor: '#388e3c', width: '100%', maxWidth: 400, paddingVertical: 18, borderRadius: 30, marginTop: 10, borderWidth: 2, borderColor: '#4CAF50' },
   continueButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center', letterSpacing: 1 },
 });

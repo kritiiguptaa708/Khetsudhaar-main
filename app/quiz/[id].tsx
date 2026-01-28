@@ -16,6 +16,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { supabase } from '@/utils/supabase';
 
 interface QuizData {
+  id: number;
   question: string;
   options: string[];
   correctAnswer: string;
@@ -42,27 +43,21 @@ export default function QuizScreen() {
       if (!id) return;
       const lessonId = parseInt(id);
 
-      // 1. Fetch Quiz Data from 'quests' table
-      // Assumption: The 'quests' table holds the quiz data for the lesson with the same ID.
-      const { data: questData, error } = await supabase
-        .from('quests')
-        .select('quiz_question, quiz_options, correct_answer')
-        .eq('id', lessonId)
+      // --- UPDATED: Fetch from 'lesson_quizzes' table ---
+      const { data: quizData, error } = await supabase
+        .from('lesson_quizzes')
+        .select('*')
+        .eq('lesson_id', lessonId)
         .single();
 
-      if (error) {
-        // Fallback or specific error handling if no quiz exists
-        console.warn("No quiz found for this lesson, checking fallback or skipping.");
-        // Optional: Redirect if no quiz exists? 
-        // For now, we show an alert or empty state
-      }
-
-      if (questData) {
+      if (error || !quizData) {
+        console.warn("No quiz found for this lesson (might be a game or reading only).");
+      } else {
         setQuiz({
-          question: questData.quiz_question || "Question not available",
-          // Postgres arrays usually come back as simple JS arrays
-          options: questData.quiz_options || [], 
-          correctAnswer: questData.correct_answer || ""
+          id: quizData.id,
+          question: quizData.question,
+          options: quizData.options || [], 
+          correctAnswer: quizData.correct_answer
         });
       }
     } catch (err) {
@@ -100,9 +95,10 @@ export default function QuizScreen() {
           .eq('id', lessonId)
           .single();
         
-        const pointsAwarded = lessonData?.points || 100; // Default 100 if missing
+        const pointsAwarded = lessonData?.points || 100;
 
         // 2. Mark Lesson as Completed
+        // Using upsert ensures we don't crash if it's already there
         const { error: lessonError } = await supabase
           .from('user_lessons')
           .upsert(
@@ -113,6 +109,7 @@ export default function QuizScreen() {
         if (lessonError) throw lessonError;
 
         // 3. Add Coins & XP to Profile
+        // We fetch current coins first, then add to them
         const { data: profile } = await supabase
           .from('profiles')
           .select('coins, xp')
@@ -149,6 +146,7 @@ export default function QuizScreen() {
     setAnswerStatus(isCorrect ? 'correct' : 'incorrect');
 
     if (isCorrect) {
+      // Small delay for visual feedback before saving
       setTimeout(() => {
         saveProgress();
       }, 1000); 
@@ -177,13 +175,16 @@ export default function QuizScreen() {
     );
   }
 
+  // Fallback if no quiz exists (Should not happen for Lesson 1, but safe to have)
   if (!quiz) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.container}>
-            <Text style={{color:'white', textAlign:'center'}}>No quiz found for this lesson.</Text>
-            <TouchableOpacity style={styles.confirmButton} onPress={() => router.back()}>
-                <Text style={styles.confirmButtonText}>Go Back</Text>
+            <Text style={{color:'white', textAlign:'center', fontSize: 18, marginBottom: 20}}>
+              No quiz required for this lesson.
+            </Text>
+            <TouchableOpacity style={styles.confirmButton} onPress={saveProgress}>
+                <Text style={styles.confirmButtonText}>Complete Lesson</Text>
             </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 20, justifyContent: 'space-between' },
   question: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', marginBottom: 40 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  optionWrapper: { width: '100%', marginBottom: 15 }, // Full width for list style options? Or keeping grid
+  optionWrapper: { width: '100%', marginBottom: 15 },
   optionButton: { backgroundColor: '#333333', borderRadius: 20, paddingVertical: 20, paddingHorizontal: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#444' },
   optionButtonSelected: { borderColor: '#388e3c', transform: [{ scale: 1.02 }] },
   optionCorrect: { backgroundColor: '#388e3c', borderColor: '#4CAF50' },

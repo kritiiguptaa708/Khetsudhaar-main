@@ -1,8 +1,7 @@
 import { FontAwesome5 } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -36,8 +35,8 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 
-import { supabase } from '@/utils/supabase';
 import { useTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/utils/supabase';
 
 import Checkmark from '../assets/images/check.svg';
 import CoinIcon from '../assets/images/coin.svg';
@@ -48,7 +47,7 @@ import SeedsIcon from '../assets/images/seeds.svg';
 const PIXEL_FONT = 'monospace';
 const { width, height } = Dimensions.get('window');
 
-// --- Crop Image Mapping ---
+// --- Crop Image Mapping (Assets still need to be local or hosted URLs) ---
 const CROP_IMAGES: { [key: string]: any } = {
   banana: require('../assets/images/crops/banana.png'),
   coffee: require('../assets/images/crops/coffee.png'),
@@ -61,58 +60,6 @@ const CROP_IMAGES: { [key: string]: any } = {
 };
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-
-// --- CALIBRATED VINE PROGRESS ---
-const INITIAL_REWARD_DATA = [
-  {
-    id: 1,
-    icon: <RationIcon width={28} height={28} />,
-    cost: 1000,
-    text: '3% OFF RATION',
-    position: { top: 1020, left: '65%' }, // Right side
-    vineProgress: 0.15, 
-  },
-  {
-    id: 2,
-    icon: <SeedsIcon width={28} height={28} />,
-    cost: 3000,
-    text: '2% DISC SEEDS',
-    position: { top: 840, left: '35%' }, // Left side
-    vineProgress: 0.31,
-  },
-  {
-    id: 3,
-    icon: <RationIcon width={28} height={28} />,
-    cost: 5000,
-    text: '5% OFF RATION',
-    position: { top: 660, left: '65%' }, // Right side
-    vineProgress: 0.47,
-  },
-  {
-    id: 4,
-    icon: <FertilizerIcon width={28} height={28} />,
-    cost: 6000,
-    text: '6% OFF FERTILIZER',
-    position: { top: 480, left: '35%' }, // Left side
-    vineProgress: 0.63,
-  },
-  {
-    id: 5,
-    icon: <SeedsIcon width={28} height={28} />,
-    cost: 8000,
-    text: '5% DISC SEEDS',
-    position: { top: 300, left: '65%' }, // Right side
-    vineProgress: 0.79,
-  },
-  {
-    id: 6,
-    icon: <RationIcon width={28} height={28} />,
-    cost: 10000,
-    text: '10% OFF RATION',
-    position: { top: 120, left: '35%' }, // Left side
-    vineProgress: 0.95,
-  },
-];
 
 // --- SMOOTH VINE PATH ---
 const VINE_PATH =
@@ -132,7 +79,7 @@ const FloatingParticle = ({ delay, size, x, duration }: any) => {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
 
-  useEffect(() => {
+  React.useEffect(() => {
     translateY.value = withDelay(delay, withRepeat(withTiming(-height, { duration: duration, easing: Easing.linear }), -1));
     opacity.value = withDelay(delay, withRepeat(withSequence(withTiming(0.6, { duration: duration/2 }), withTiming(0, { duration: duration/2 })), -1));
   }, []);
@@ -160,8 +107,15 @@ const StatBox = ({ label, value, iconName }: any) => (
 );
 
 const RewardNode = ({ node, index, onPress }: any) => {
-  const { icon, cost, text, isUnlocked, isCurrent, position } = node;
-  const isLeft = parseFloat(position.left) < 50;
+  const { icon_type, cost, title, isUnlocked, isCurrent, position_top, position_left } = node;
+  const isLeft = parseFloat(position_left || '50%') < 50;
+
+  // Render correct icon based on DB string
+  const renderIcon = () => {
+    if (icon_type === 'seeds') return <SeedsIcon width={28} height={28} />;
+    if (icon_type === 'fertilizer') return <FertilizerIcon width={28} height={28} />;
+    return <RationIcon width={28} height={28} />;
+  };
 
   const scale = useSharedValue(0);
   const pulse = useSharedValue(1);
@@ -183,24 +137,21 @@ const RewardNode = ({ node, index, onPress }: any) => {
   }));
 
   return (
-    <Animated.View style={[styles.node, { top: position.top }, isLeft ? styles.nodeLeft : styles.nodeRight, animatedStyle]}>
+    <Animated.View style={[styles.node, { top: position_top }, isLeft ? styles.nodeLeft : styles.nodeRight, animatedStyle]}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
         <View style={[styles.nodeWrapper, isLeft ? styles.wrapperLeft : styles.wrapperRight]}>
           
-          {/* Text Tag - Now closer to center */}
           <View style={[styles.textTag, isLeft ? styles.textTagLeft : styles.textTagRight]}>
-             <Text style={styles.nodeTitle} numberOfLines={2}>{text}</Text>
+             <Text style={styles.nodeTitle} numberOfLines={2}>{title}</Text>
              <View style={styles.costRow}>
                 <CoinIcon width={12} height={12} />
                 <Text style={styles.nodeCost}>{cost}</Text>
              </View>
           </View>
 
-          {/* Icon Circle */}
           <View style={[styles.iconCircle, isUnlocked ? styles.iconCircleUnlocked : styles.iconCircleLocked]}>
-            {isUnlocked ? icon : <FontAwesome5 name="lock" size={18} color="rgba(255,255,255,0.3)" />}
+            {isUnlocked ? renderIcon() : <FontAwesome5 name="lock" size={18} color="rgba(255,255,255,0.3)" />}
             
-            {/* Status Badge */}
             {isUnlocked && (
               <View style={styles.checkBadge}>
                 <Checkmark width={8} height={8} />
@@ -231,46 +182,51 @@ export default function RewardRootScreen() {
     useCallback(() => {
       const loadData = async () => {
         try {
-          const cachedPoints = await AsyncStorage.getItem('user_points');
-          const cachedCrop = await AsyncStorage.getItem('user_selected_crop');
-          if (cachedPoints) setUserPoints(parseInt(cachedPoints));
-          if (cachedCrop) setSelectedCrop(cachedCrop);
-
           const { data: { session } } = await supabase.auth.getSession();
           if (!session) { setLoading(false); return; }
           setUserId(session.user.id);
 
-          const [profileResult, rewardsResult] = await Promise.all([
-            supabase.from('profiles').select('coins, selected_crop').eq('id', session.user.id).single(),
-            supabase.from('user_rewards').select('reward_id').eq('user_id', session.user.id)
-          ]);
-
-          const profile = profileResult.data;
-          const unlockedData = rewardsResult.data || [];
-          const unlockedIds = unlockedData.map((r: any) => r.reward_id);
-
+          // 1. Fetch User Profile
+          const { data: profile } = await supabase.from('profiles').select('coins, selected_crop').eq('id', session.user.id).single();
           if (profile) {
             setUserPoints(profile.coins || 0);
             setSelectedCrop(profile.selected_crop);
           }
 
+          // 2. Fetch ALL Rewards from DB
+          const { data: allRewards, error: rewardsError } = await supabase
+            .from('rewards')
+            .select('*')
+            .order('id', { ascending: true });
+          
+          if (rewardsError) throw rewardsError;
+
+          // 3. Fetch Unlocked Rewards
+          const { data: unlockedData } = await supabase.from('user_rewards').select('reward_id').eq('user_id', session.user.id);
+          const unlockedIds = unlockedData?.map((r: any) => r.reward_id) || [];
+
           setCollectedCount(unlockedIds.length);
           const maxUnlockedId = Math.max(0, ...unlockedIds);
           
-          const lastUnlockedReward = INITIAL_REWARD_DATA.find(r => r.id === maxUnlockedId);
-          const targetProgress = lastUnlockedReward ? lastUnlockedReward.vineProgress : 0;
+          // Calculate Vine Progress based on the last unlocked reward
+          const lastUnlockedReward = allRewards?.find(r => r.id === maxUnlockedId);
+          const targetProgress = lastUnlockedReward ? lastUnlockedReward.vine_progress : 0;
 
           const targetOffset = VINE_LENGTH * (1 - targetProgress);
           animatedStrokeDashoffset.value = withTiming(targetOffset, { duration: 1500, easing: Easing.out(Easing.cubic) });
 
-          setRewards(INITIAL_REWARD_DATA.map((r) => ({
+          // Map data for UI
+          const mappedRewards = (allRewards || []).map((r) => ({
             ...r,
             isUnlocked: unlockedIds.includes(r.id),
-            isCurrent: !unlockedIds.includes(r.id) && r.id === maxUnlockedId + 1
-          })));
+            // It is "Current" if it is the NEXT one in line after the max unlocked
+            isCurrent: !unlockedIds.includes(r.id) && (unlockedIds.length === 0 ? r.id === allRewards[0].id : r.id === maxUnlockedId + 1)
+          }));
+
+          setRewards(mappedRewards);
 
         } catch (e) {
-          console.error("Error:", e);
+          console.error("Error loading rewards:", e);
         } finally {
           setLoading(false); 
         }
@@ -290,41 +246,39 @@ export default function RewardRootScreen() {
       return;
     }
     if (!node.isCurrent) {
-      // --- TRANSLATION APPLIED ---
-      Alert.alert(t('unlocked'), "Grow your roots step by step!"); // Using fallback body here
+      Alert.alert(t('unlocked'), "Grow your roots step by step!"); 
       return;
     }
     if (userPoints < node.cost) {
-      // --- TRANSLATION APPLIED ---
       Alert.alert(t('available_coins'), `You need ${node.cost} coins.`); 
       return;
     }
 
-    // --- TRANSLATION APPLIED ---
     Alert.alert(t('rewards_tree_title'), `Spend ${node.cost} coins?`, [
       { text: t('confirm'), style: "cancel" },
       {
-        text: t('confirm'), // Re-using confirm for unlock button text
+        text: t('confirm'), 
         onPress: async () => {
           if (!userId) return;
           
-          // Optimistic Update
           const newBalance = userPoints - node.cost;
           setUserPoints(newBalance);
           setCollectedCount(prev => prev + 1);
           
+          // Optimistic UI Update
           setRewards(prev => prev.map(r => 
             r.id === node.id ? { ...r, isUnlocked: true, isCurrent: false } : 
             r.id === node.id + 1 ? { ...r, isCurrent: true } : r
           ));
 
-          // Grow vine to THIS node
-          const targetOffset = VINE_LENGTH * (1 - node.vineProgress);
+          // Grow vine
+          const targetOffset = VINE_LENGTH * (1 - node.vine_progress);
           animatedStrokeDashoffset.value = withTiming(targetOffset, { duration: 1000 });
 
           setActiveReward(node);
           setModalVisible(true);
 
+          // DB Update
           await supabase.from('profiles').update({ coins: newBalance }).eq('id', userId);
           await supabase.from('user_rewards').insert({ user_id: userId, reward_id: node.id });
         }
@@ -341,8 +295,6 @@ export default function RewardRootScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* --- PREMIUM ORGANIC BACKGROUND --- */}
       <View style={StyleSheet.absoluteFill}>
         <Svg height="100%" width="100%">
           <Defs>
@@ -359,17 +311,14 @@ export default function RewardRootScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.statsContainer}>
-          {/* --- TRANSLATION APPLIED --- */}
           <StatBox label={t('available_coins')} value={String(userPoints)} iconName="coins" />
           <StatBox label={t('unlocked')} value={String(collectedCount)} iconName="gift" />
         </View>
         
-        {/* --- TRANSLATION APPLIED --- */}
         <Text style={styles.rewardRootTitle}>{t('rewards_tree_title')}</Text>
         
         <View style={styles.rootContainer}>
           <Svg style={styles.vineSvg} height={1200} width={300}>
-            {/* Track Path (Soil Color) */}
             <Path 
               d={VINE_PATH} 
               stroke="#3e2723" 
@@ -378,7 +327,6 @@ export default function RewardRootScreen() {
               strokeLinecap="round"
               strokeOpacity={0.5}
             />
-            {/* Fill Path (Vibrant Plant Green) */}
             <AnimatedPath 
               d={VINE_PATH} 
               stroke="#4CAF50" 
@@ -408,11 +356,10 @@ export default function RewardRootScreen() {
             <Text style={styles.modalTitle}>REWARD UNLOCKED!</Text>
             {activeReward && (
               <>
-                <Text style={styles.modalRewardName}>{activeReward.text}</Text>
+                <Text style={styles.modalRewardName}>{activeReward.title}</Text>
                 <View style={styles.qrBox}>
                   <QRCode value={`KHET_REWARD_${activeReward.id}_USER_${userId}`} size={180} />
                 </View>
-                {/* --- TRANSLATION APPLIED --- */}
                 <Text style={styles.scanInstruction}>{t('scan_at_store')}</Text>
               </>
             )}
@@ -439,7 +386,6 @@ const styles = StyleSheet.create({
 
   rewardRootTitle: { color: '#A5D6A7', fontFamily: PIXEL_FONT, fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 10, marginBottom: 30, letterSpacing: 2 },
   
-  // Root System
   rootContainer: { position: 'relative', width: '100%', height: 1200, alignItems: 'center' },
   vineSvg: { position: 'absolute', top: 0, left: '50%', transform: [{ translateX: -150 }] },
   
@@ -451,8 +397,8 @@ const styles = StyleSheet.create({
 
   // Nodes & Layout
   node: { position: 'absolute', zIndex: 20 },
-  nodeLeft: { right: '50%', marginRight: 55 }, // Tighter layout
-  nodeRight: { left: '50%', marginLeft: 55 },  // Tighter layout
+  nodeLeft: { right: '50%', marginRight: 55 },
+  nodeRight: { left: '50%', marginLeft: 55 },
   
   nodeWrapper: { flexDirection: 'row', alignItems: 'center' },
   wrapperLeft: { flexDirection: 'row-reverse' },
@@ -472,7 +418,6 @@ const styles = StyleSheet.create({
   
   checkBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#1b2e15' },
 
-  // Modal
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.85)' },
   modalView: { width: '80%', backgroundColor: '#233320', borderRadius: 20, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: '#4CAF50' },
   modalTitle: { fontSize: 20, color: '#4CAF50', fontFamily: PIXEL_FONT, fontWeight: 'bold', marginBottom: 15 },

@@ -28,22 +28,23 @@ export default function LessonCompleteScreen() {
       if (!id) return;
       
       const lang = language || DEFAULT_LANGUAGE;
-      // Dynamic columns based on language
       const titleCol = `title_${lang}`;
       const fallbackTitle = `title_${DEFAULT_LANGUAGE}`;
 
+      // FIX: Use select('*') to prevent TypeScript ParserError on dynamic strings
       const { data, error } = await supabase
         .from('lessons')
-        .select(`points, ${titleCol}, ${fallbackTitle}`)
+        .select('*')
         .eq('id', id)
         .single();
 
       if (!error && data) {
-        // @ts-ignore - Supabase types might not perfectly infer dynamic keys
-        const title = data[titleCol] || data[fallbackTitle] || "Lesson Completed";
+        // Cast data to 'any' to access the dynamic title column safely
+        const rawData = data as any;
+        const title = rawData[titleCol] || rawData[fallbackTitle] || "Lesson Completed";
         setLessonInfo({
           title,
-          points: data.points || 0
+          points: rawData.points || 0
         });
       }
       setLoading(false);
@@ -53,7 +54,6 @@ export default function LessonCompleteScreen() {
   }, [id, language]);
 
   const handleContinue = async () => {
-    // Check if user is guest (optional, based on your previous logic)
     const { data: { session } } = await supabase.auth.getSession();
     const isGuest = !session;
 
@@ -65,7 +65,11 @@ export default function LessonCompleteScreen() {
   };
 
   if (loading) {
-    return <SafeAreaView style={[styles.safeArea, {justifyContent:'center', alignItems:'center'}]}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
+    return (
+      <SafeAreaView style={[styles.safeArea, {justifyContent:'center', alignItems:'center'}]}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </SafeAreaView>
+    );
   }
 
   return (
