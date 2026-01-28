@@ -14,6 +14,10 @@ export default function Index() {
 
   const checkOnboardingStatus = async () => {
     try {
+      // --- TEMPORARY: UNCOMMENT THIS LINE TO RESET APP FOR TESTING ---
+      // await AsyncStorage.clear(); 
+      // ---------------------------------------------------------------
+
       // 1. Check if user is already logged in (Skip everything)
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -31,11 +35,9 @@ export default function Index() {
       } else if (!crop) {
         setNextScreen('/crop');     // Step 2: User hasn't chosen crop
       } else if (!rewardClaimed) {
-        // Step 3: Send to First LESSON (ID 1)
-        // CHANGED FROM QUEST DETAILS TO LESSON
-        setNextScreen('/lesson/1'); 
+        setNextScreen('/lesson/1'); // Step 3: Lesson 1
       } else {
-        setNextScreen('/login');    // Step 4: Finished flow, needs to login
+        setNextScreen('/login');    // Step 4: Login/Signup
       }
     } catch (e) {
       console.error("Onboarding check failed", e);

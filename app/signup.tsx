@@ -65,6 +65,19 @@ export default function SignupScreen() {
       return;
     }
 
+    // --- CRITICAL CHECK: HANDLE EMAIL CONFIRMATION ---
+    // If Supabase requires email confirmation, session will be null.
+    if (!authData.session && authData.user) {
+      setIsLoading(false);
+      Alert.alert(
+        'Check your Email',
+        'Please confirm your email address to finish logging in.',
+        [{ text: 'OK', onPress: () => router.replace('/login') }]
+      );
+      return;
+    }
+    // -------------------------------------------------
+
     // 3. RETRIEVE ONBOARDING CHOICES
     let crop = 'FARMER';
     let lang = 'en';
@@ -93,7 +106,7 @@ export default function SignupScreen() {
                 mobile_no: phone,             
                 selected_crop: crop,          
                 language: lang,              
-                coins: 1000, // Bonus for signing up!
+                coins: 1000, 
                 xp: 100
             });
         
@@ -101,13 +114,14 @@ export default function SignupScreen() {
             console.error('Profile creation error:', profileError);
             Alert.alert('Error', 'Account created but profile failed to save.');
         } else {
-            // B. CRITICAL: Mark Lesson 1 as Complete in DB!
-            // This ensures they can move to Lesson 2 immediately.
-            await supabase.from('user_lessons').upsert({
+            // B. Mark Lesson 1 as Complete in DB
+            const { error: lessonError } = await supabase.from('user_lessons').upsert({
                 user_id: userId,
                 lesson_id: 1, 
                 completed_at: new Date().toISOString()
             });
+            
+            if (lessonError) console.error("Error saving lesson:", lessonError);
 
             // C. Clear onboarding flags
             await AsyncStorage.setItem('onboarding_reward_claimed', 'true');
@@ -115,8 +129,9 @@ export default function SignupScreen() {
     }
 
     setIsLoading(false);
-    Alert.alert('Success', 'Account created! Lesson 1 marked as complete.');
-    // 5. Navigate to Lessons (so they can see Lesson 2 unlocked)
+    
+    // 5. Navigate to Lessons
+    // Use replace to prevent going back to signup
     router.replace('/lessons');
   };
 
@@ -137,7 +152,6 @@ export default function SignupScreen() {
           <UserIcon width={80} height={80} />
         </View>
 
-        {/* FULL NAME */}
         <Text style={styles.inputLabel}>FULL NAME</Text>
         <TextInput
           style={styles.input as StyleProp<TextStyle>}
@@ -147,7 +161,6 @@ export default function SignupScreen() {
           onChangeText={setFullName}
         />
 
-        {/* USERNAME */}
         <Text style={styles.inputLabel}>USERNAME</Text>
         <TextInput
           style={styles.input as StyleProp<TextStyle>}
@@ -158,7 +171,6 @@ export default function SignupScreen() {
           onChangeText={setUsername}
         />
 
-        {/* PHONE */}
         <Text style={styles.inputLabel}>PHONE NUMBER</Text>
         <TextInput
           style={styles.input as StyleProp<TextStyle>}
@@ -169,7 +181,6 @@ export default function SignupScreen() {
           onChangeText={setPhone}
         />
 
-        {/* PASSWORD */}
         <Text style={styles.inputLabel}>PASSWORD</Text>
         <TextInput
           style={styles.input as StyleProp<TextStyle>}
@@ -180,7 +191,6 @@ export default function SignupScreen() {
           onChangeText={setPassword}
         />
 
-        {/* CONFIRM PASSWORD */}
         <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
         <TextInput
           style={styles.input as StyleProp<TextStyle>}
