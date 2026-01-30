@@ -32,13 +32,22 @@ export default function SchemeDetailScreen() {
   const { t, language } = useTranslation();
   const isHindi = language === "hi";
 
-  const scheme = GOV_SCHEMES.find((s) => s.id === id);
+  // FIX: Ensure ID is always a string
+  const schemeId = Array.isArray(id) ? id[0] : id;
+
+  // Find the scheme from your hardcoded file
+  const scheme = GOV_SCHEMES.find((s) => s.id === schemeId);
 
   if (!scheme) {
     return (
-      <View style={styles.container}>
-        <Text style={{ color: "white", textAlign: "center", marginTop: 50 }}>
+      <View style={[styles.container, styles.center]}>
+        <Stack.Screen options={{ title: "Not Found", headerBackTitle: "" }} />
+        <FontAwesome5 name="exclamation-circle" size={50} color="#666" />
+        <Text style={{ color: "white", textAlign: "center", marginTop: 20 }}>
           Scheme not found
+        </Text>
+        <Text style={{ color: "#666", fontSize: 12, marginTop: 10 }}>
+          ID: {schemeId}
         </Text>
       </View>
     );
@@ -49,9 +58,11 @@ export default function SchemeDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* FIXED: Removed headerBackTitleVisible, added headerBackTitle: "" */}
       <Stack.Screen
-        options={{ title: t("schemes_title"), headerBackTitle: "" }}
+        options={{
+          title: t("schemes_title") || "Scheme Details",
+          headerBackTitle: "",
+        }}
       />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Hero Section */}
@@ -62,7 +73,7 @@ export default function SchemeDetailScreen() {
           ]}
         >
           <View style={[styles.heroIcon, { backgroundColor: scheme.color }]}>
-            <FontAwesome5 name={scheme.icon} size={32} color="white" />
+            <FontAwesome5 name={scheme.icon as any} size={32} color="white" />
           </View>
           <Text style={styles.heroTitle}>{title}</Text>
           <Text style={styles.heroDesc}>{desc}</Text>
@@ -70,7 +81,7 @@ export default function SchemeDetailScreen() {
 
         {/* Benefits */}
         <InfoSection
-          title={t("benefits")}
+          title={t("benefits") || "Benefits"}
           icon="gift"
           color="#4CAF50"
           items={isHindi ? scheme.benefits_hi : scheme.benefits_en}
@@ -78,7 +89,7 @@ export default function SchemeDetailScreen() {
 
         {/* Eligibility */}
         <InfoSection
-          title={t("eligibility")}
+          title={t("eligibility") || "Eligibility"}
           icon="user-check"
           color="#2196F3"
           items={isHindi ? scheme.eligibility_hi : scheme.eligibility_en}
@@ -86,7 +97,7 @@ export default function SchemeDetailScreen() {
 
         {/* Process (How to Apply) */}
         <InfoSection
-          title={t("process")}
+          title={t("process") || "Process"}
           icon="walking"
           color="#9C27B0"
           items={isHindi ? scheme.steps_hi : scheme.steps_en}
@@ -98,6 +109,7 @@ export default function SchemeDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#121212" },
+  center: { justifyContent: "center", alignItems: "center" },
   scrollContent: { padding: 20, paddingBottom: 50 },
   hero: {
     alignItems: "center",
@@ -128,7 +140,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-
   sectionContainer: { marginBottom: 20 },
   sectionHeader: {
     flexDirection: "row",
@@ -144,7 +155,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   sectionTitle: { fontSize: 16, fontWeight: "bold", letterSpacing: 1 },
-
   card: { backgroundColor: "#1E1E1E", borderRadius: 12, padding: 16 },
   listItem: { flexDirection: "row", marginBottom: 12 },
   bullet: {

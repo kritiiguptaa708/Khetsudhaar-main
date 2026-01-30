@@ -28,7 +28,6 @@ import Reward from "../assets/images/Reward.svg";
 
 const PIXEL_FONT = "monospace";
 
-// 1. Define the shape of a Lesson from Supabase
 interface Lesson {
   id: number;
   sequence: number;
@@ -61,7 +60,6 @@ const fetchUserProgress = async (): Promise<UserProgress> => {
     };
   }
 
-  // A. Fetch User Profile
   const { data: profileData } = await supabase
     .from("profiles")
     .select("coins, full_name")
@@ -71,7 +69,6 @@ const fetchUserProgress = async (): Promise<UserProgress> => {
   const user_coins = profileData?.coins || 0;
   const user_name = profileData?.full_name || "FARMER";
 
-  // B. Fetch All Lessons
   const { data: allLessons, error: lessonError } = await supabase
     .from("lessons")
     .select("id, sequence, title_en, title_hi, description_en, description_hi")
@@ -82,7 +79,6 @@ const fetchUserProgress = async (): Promise<UserProgress> => {
   const lessons = allLessons || [];
   const total_lessons = lessons.length;
 
-  // C. Fetch Completed Lessons
   const { data: userLessons } = await supabase
     .from("user_lessons")
     .select("lesson_id")
@@ -91,7 +87,6 @@ const fetchUserProgress = async (): Promise<UserProgress> => {
   const completedIds = new Set(userLessons?.map((ul) => ul.lesson_id) || []);
   const completed_lessons = completedIds.size;
 
-  // D. Find the Next Lesson
   const nextLessonData = lessons.find((l) => !completedIds.has(l.id)) || null;
 
   return {
@@ -135,7 +130,7 @@ export default function DashboardScreen() {
     loading: progressLoading,
     refresh: refreshProgress,
     refreshing,
-  } = useCachedQuery(`dashboard_progress_fixed`, fetchUserProgress);
+  } = useCachedQuery(`dashboard_progress_fixed_v2`, fetchUserProgress);
 
   const handleRefresh = async () => {
     await refreshProgress();
@@ -264,11 +259,12 @@ export default function DashboardScreen() {
             />
           </View>
 
+          {/* FIX: Corrected navigation path */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("schemes_title") || "Govt Schemes"}
               icon={<FontAwesome5 name="university" size={40} color="white" />}
-              onPress={() => router.push("/schemes/index" as any)}
+              onPress={() => router.push("/schemes" as any)}
               style={[
                 styles.buttonRect,
                 {
@@ -420,7 +416,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 8,
   },
-  progressFill: { height: "100%", backgroundColor: "#4CAF50", borderRadius: 4 },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#4CAF50",
+    borderRadius: 4,
+  },
   progressText: {
     color: "#888",
     fontSize: 10,

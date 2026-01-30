@@ -26,7 +26,7 @@ export default function SchemesListScreen() {
       activeOpacity={0.8}
     >
       <View style={[styles.iconBox, { backgroundColor: item.color }]}>
-        <FontAwesome5 name={item.icon} size={24} color="white" />
+        <FontAwesome5 name={item.icon as any} size={24} color="white" />
       </View>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle}>
@@ -37,7 +37,7 @@ export default function SchemesListScreen() {
         </Text>
         <View style={styles.ctaRow}>
           <Text style={[styles.ctaText, { color: item.color }]}>
-            {t("view_details")}
+            {t("view_details") || "View Details"}
           </Text>
           <FontAwesome5 name="arrow-right" size={12} color={item.color} />
         </View>
@@ -47,10 +47,12 @@ export default function SchemesListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: t("schemes_title") }} />
+      <Stack.Screen options={{ title: t("schemes_title") || "Govt Schemes" }} />
 
       <View style={styles.header}>
-        <Text style={styles.subHeader}>{t("schemes_subtitle")}</Text>
+        <Text style={styles.subHeader}>
+          {t("schemes_subtitle") || "Empowering Farmers"}
+        </Text>
       </View>
 
       <FlatList
