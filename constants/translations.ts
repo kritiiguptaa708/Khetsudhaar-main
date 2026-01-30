@@ -75,13 +75,16 @@ export type TranslationKeys =
   | "mission_complete"
   | "great_job"
   | "quest_complete"
-  // --- NEW KEYS ADDED HERE ---
   | "schemes_title"
   | "schemes_subtitle"
   | "view_details"
   | "benefits"
   | "eligibility"
-  | "process";
+  | "process"
+  // --- NEW KEYS ADDED ---
+  | "change_crop"
+  | "change_language"
+  | "settings";
 
 // Define the structure of the translations
 type Translations = Record<TranslationKeys, string>;
@@ -168,13 +171,16 @@ const translations: LanguageMap = {
     mission_complete: "MISSION COMPLETE",
     great_job: "You have successfully completed the learning module.",
     quest_complete: "Quest Complete",
-    // --- New Translations ---
     schemes_title: "Government Schemes",
     schemes_subtitle: "Empowering Farmers",
     view_details: "View Details",
     benefits: "Benefits",
     eligibility: "Eligibility",
     process: "Application Process",
+    // --- New Translations ---
+    change_crop: "Change Crop",
+    change_language: "Change Language",
+    settings: "Settings",
   },
 
   // 2. Hindi (hi)
@@ -254,13 +260,16 @@ const translations: LanguageMap = {
     mission_complete: "मिशन पूरा हुआ",
     great_job: "आपने सीखने का मॉड्यूल सफलतापूर्वक पूरा कर लिया है।",
     quest_complete: "मिशन पूरा",
-    // --- New Translations ---
     schemes_title: "सरकारी योजनाएं",
     schemes_subtitle: "किसानों का सशक्तिकरण",
     view_details: "विवरण देखें",
     benefits: "लाभ",
     eligibility: "पात्रता",
     process: "आवेदन प्रक्रिया",
+    // --- New Translations ---
+    change_crop: "फ़सल बदलें",
+    change_language: "भाषा बदलें",
+    settings: "सेटिंग्स",
   },
 
   // 3. Punjabi (pa)
@@ -340,13 +349,16 @@ const translations: LanguageMap = {
     mission_complete: "ਮਿਸ਼ਨ ਪੂਰਾ",
     great_job: "ਤੁਸੀਂ ਸਫਲਤਾਪੂਰਵਕ ਪਾਠ ਪੂਰਾ ਕਰ ਲਿਆ ਹੈ।",
     quest_complete: "ਮਿਸ਼ਨ ਪੂਰਾ",
-    // --- New Translations Added to Prevent Errors ---
     schemes_title: "Sarkari Yojnaavan",
     schemes_subtitle: "Kisanan da Sashaktikaran",
     view_details: "Verva Vekho",
     benefits: "Laabh",
     eligibility: "Yogyata",
     process: "Arzi Prakriya",
+    // --- New Translations ---
+    change_crop: "Fasal Badlo",
+    change_language: "Bhasha Badlo",
+    settings: "Settings",
   },
 
   // 4. Malayalam (ml)
@@ -426,13 +438,16 @@ const translations: LanguageMap = {
     mission_complete: "ദൗത്യം പൂർത്തിയായി",
     great_job: "നിങ്ങൾ പഠന മൊഡ്യൂൾ വിജയകരമായി പൂർത്തിയാക്കി.",
     quest_complete: "ദൗത്യം പൂർത്തിയായി",
-    // --- New Translations Added to Prevent Errors ---
     schemes_title: "Government Schemes",
     schemes_subtitle: "Empowering Farmers",
     view_details: "View Details",
     benefits: "Benefits",
     eligibility: "Eligibility",
     process: "Application Process",
+    // --- New Translations ---
+    change_crop: "വിള മാറ്റുക",
+    change_language: "ഭാഷ മാറ്റുക",
+    settings: "ക്രമീകരണങ്ങൾ",
   },
 };
 

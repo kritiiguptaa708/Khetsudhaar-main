@@ -26,20 +26,38 @@ const fetchQuestsData = async () => {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user?.id;
 
-  // 1. Fetch Quests
-  const { data: questsData, error: questError } = await supabase
-    .from("quests")
-    .select("*")
-    .order("id");
+  // 1. Get User's Selected Crop
+  let userCrop = null;
+  if (userId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("selected_crop")
+      .eq("id", userId)
+      .single();
+    userCrop = profile?.selected_crop;
+  }
 
+  // 2. Fetch Quests (Filter by Crop)
+  let query = supabase.from("quests").select("*").order("id");
+
+  if (userCrop) {
+    // Show Global (null) OR Crop Specific
+    query = query.or(`target_crop.is.null,target_crop.eq.${userCrop}`);
+  } else {
+    // Show only Global if no crop selected
+    query = query.is("target_crop", null);
+  }
+
+  const { data: questsData, error: questError } = await query;
   if (questError) throw questError;
 
-  // 2. Fetch User Data
+  // 3. Fetch User Data (Rank, Coins, etc.)
   let completedIds = new Set();
   let userRank = "-";
   let userCoins = 0;
 
   if (userId) {
+    // ... (Keep your existing rank/coin logic here) ...
     // Fetch Completed IDs
     const { data: userQuests } = await supabase
       .from("user_quests")
@@ -71,13 +89,12 @@ const fetchQuestsData = async () => {
 
   const finalQuests = (questsData || []).map((q) => ({
     ...q,
-    xp_reward: QUEST_REWARD, // FORCE 1000
+    xp_reward: 1000, // Force 1000
     isCompleted: completedIds.has(q.id),
   }));
 
   return { quests: finalQuests, userRank, userCoins };
 };
-
 export default function QuestsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
