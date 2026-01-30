@@ -125,12 +125,13 @@ export default function LeaderboardScreen() {
       if (currentId) {
         let userEntry = data?.find((u) => u.id === currentId);
 
+        // If user not in top 50, fetch them separately
         if (!userEntry) {
           const { data: userData } = await supabase
             .from("leaderboard_view")
             .select("*")
             .eq("id", currentId)
-            .single();
+            .maybeSingle();
           userEntry = userData;
         }
         setCurrentUser(userEntry);
@@ -193,7 +194,6 @@ export default function LeaderboardScreen() {
               <Text style={styles.myStatsTitle}>MY SCORE BREAKDOWN</Text>
 
               <View style={styles.mathRow}>
-                {/* Wealth */}
                 <View style={styles.mathItem}>
                   <Text style={styles.mathLabel}>
                     {t("wealth") || "WEALTH"}
@@ -208,7 +208,6 @@ export default function LeaderboardScreen() {
 
                 <Text style={styles.mathOperator}>×</Text>
 
-                {/* Multiplier */}
                 <View style={styles.mathItem}>
                   <Text style={styles.mathLabel}>
                     {t("multiplier") || "BOOST"}
@@ -223,7 +222,6 @@ export default function LeaderboardScreen() {
 
                 <Text style={styles.mathOperator}>=</Text>
 
-                {/* Final Score */}
                 <View style={styles.mathItem}>
                   <Text style={styles.mathLabel}>TOTAL</Text>
                   <Text
@@ -285,32 +283,37 @@ const styles = StyleSheet.create({
   // My Stats Card
   myStatsCard: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
     borderColor: "#333",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   myStatsTitle: {
     color: "#AAA",
     fontSize: 10,
     fontWeight: "bold",
     letterSpacing: 1.5,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   mathRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   mathItem: { alignItems: "center" },
   mathLabel: {
     color: "#666",
     fontSize: 10,
     fontWeight: "bold",
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  iconRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  iconRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   mathValue: {
     color: "white",
     fontSize: 16,
@@ -320,53 +323,76 @@ const styles = StyleSheet.create({
   mathOperator: { color: "#444", fontSize: 18, fontWeight: "bold" },
   tipText: {
     color: "#E1BEE7",
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
     fontStyle: "italic",
     opacity: 0.8,
   },
 
   // List
-  listContainer: { gap: 10 },
+  listContainer: { gap: 12 },
 
   // Rank Card Styles
   rankCardBase: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
     backgroundColor: "#1E1E1E",
     borderColor: "#333",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
   },
-  defaultCard: {}, // <--- ADDED THIS TO FIX THE ERROR
+
+  // Default Card (Fixed missing prop)
+  defaultCard: {
+    borderColor: "#333",
+  },
+
+  // GLOWING CARDS (Colored Shadows)
   userCard: {
-    backgroundColor: "rgba(56, 142, 60, 0.15)",
+    backgroundColor: "#1E251E",
     borderColor: "#2E7D32",
     borderWidth: 2,
+    shadowColor: "#4CAF50", // Green Glow
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   goldCard: {
-    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    backgroundColor: "#262215",
     borderColor: "#FFC107",
+    shadowColor: "#FFD700", // Gold Glow
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   silverCard: {
-    backgroundColor: "rgba(192, 192, 192, 0.1)",
+    backgroundColor: "#202020",
     borderColor: "#BDBDBD",
+    shadowColor: "#E0E0E0", // Silver Glow
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
   bronzeCard: {
-    backgroundColor: "rgba(205, 127, 50, 0.1)",
+    backgroundColor: "#241E1B",
     borderColor: "#A1887F",
+    shadowColor: "#CD7F32", // Bronze Glow
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
 
   // Rank Number Circle
   rankNumberContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#2C2C2E",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
   goldRankNumber: { backgroundColor: "#FFC107" },
   silverRankNumber: { backgroundColor: "#BDBDBD" },
@@ -375,7 +401,7 @@ const styles = StyleSheet.create({
 
   rankNumber: {
     color: "white",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "bold",
     fontFamily: PIXEL_FONT,
   },
@@ -385,13 +411,13 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 4,
+    marginBottom: 6,
   },
 
   statsRow: { flexDirection: "row", alignItems: "center" },
-  miniStat: { flexDirection: "row", alignItems: "center", gap: 4 },
+  miniStat: { flexDirection: "row", alignItems: "center", gap: 6 },
   miniStatText: { color: "#AAA", fontSize: 12, fontWeight: "500" },
-  divider: { color: "#444", marginHorizontal: 6, fontSize: 10 },
+  divider: { color: "#444", marginHorizontal: 8, fontSize: 10 },
 
   // Score Badge
   scoreBadge: {

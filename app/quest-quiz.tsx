@@ -17,22 +17,22 @@ import { useCachedQuery } from "@/hooks/useCachedQuery";
 import { useTranslation } from "@/hooks/useTranslation";
 import { supabase } from "@/utils/supabase";
 
-// Importing your existing Qcoin asset
 import QCoin from "../assets/images/Qcoin.svg";
 
 const PIXEL_FONT = "monospace";
 
-// --- FETCHER ---
+// Force 1000 XP constant
+const QUEST_REWARD = 1000;
+
 const fetchQuiz = async (id: string) => {
   const { data, error } = await supabase
     .from("quests")
-    .select(
-      "id, title, quiz_question, quiz_options, correct_answer, quiz_explanation, xp_reward",
-    )
+    .select("*")
     .eq("id", id)
     .single();
+
   if (error) throw error;
-  return data;
+  return { ...data, xp_reward: QUEST_REWARD }; // Visual Override
 };
 
 export default function QuizScreen() {
@@ -44,7 +44,7 @@ export default function QuizScreen() {
     data: quizData,
     loading,
     isOffline,
-  } = useCachedQuery(`quest_quiz_${id}`, () => fetchQuiz(id!));
+  } = useCachedQuery(`quest_quiz_final_${id}`, () => fetchQuiz(id!));
 
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,7 +55,7 @@ export default function QuizScreen() {
   const handleSubmit = async () => {
     if (!selectedAnswer || !quizData) return;
     if (isOffline) {
-      Alert.alert(t("offline_mode"), t("go_online"));
+      Alert.alert("Offline", "Please connect to internet to complete quest.");
       return;
     }
 
@@ -65,28 +65,35 @@ export default function QuizScreen() {
 
     if (isCorrect) {
       try {
-        // --- SECURE FIX: Call the Database RPC Function ---
-        const { data, error } = await supabase.rpc("complete_quest", {
-          quest_id_input: quizData.id,
-        });
+        const { data: session } = await supabase.auth.getSession();
+        const userId = session.session?.user.id;
 
-        if (error) {
-          console.error("Error completing quest:", error);
-          Alert.alert(
-            "Error",
-            "Could not save progress. You may have already completed this quest.",
-          );
-          // If error, we shouldn't let them proceed as if they won
-          setResultState("none");
-          return;
-        }
+        if (userId) {
+          // 1. Mark as Complete (Insert into user_quests)
+          const { error: insertError } = await supabase
+            .from("user_quests")
+            .insert({ user_id: userId, quest_id: quizData.id });
 
-        // If data is false, it means the SQL function said "User already did this"
-        if (data === false) {
-          console.log("Quest was already completed previously.");
+          // Only add coins if this was a new completion (no duplicate error)
+          if (!insertError || insertError.code === "23505") {
+            // 2. Fetch current coins
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("quest_coins")
+              .eq("id", userId)
+              .single();
+
+            const currentCoins = profile?.quest_coins || 0;
+
+            // 3. Add 1000 Coins
+            await supabase
+              .from("profiles")
+              .update({ quest_coins: currentCoins + QUEST_REWARD })
+              .eq("id", userId);
+          }
         }
       } catch (err) {
-        console.error("Save error", err);
+        console.error("Completion error", err);
       }
     }
     setIsSubmitting(false);
@@ -94,50 +101,39 @@ export default function QuizScreen() {
 
   const handleContinue = () => {
     if (resultState === "correct") {
-      router.replace("/quests");
+      router.replace("/quests"); // Go back to list
     } else {
       setResultState("none");
       setSelectedAnswer(null);
     }
   };
 
-  if (loading)
+  if (loading || !quizData) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="#7B1FA2" />
       </SafeAreaView>
     );
-  if (!quizData)
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <Text style={{ color: "white" }}>Quiz not loaded</Text>
-      </SafeAreaView>
-    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {isOffline && (
-          <View style={styles.offlineBanner}>
-            <Text style={styles.offlineText}>{t("offline_mode")}</Text>
-          </View>
-        )}
-
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t("knowledge_check")}</Text>
+          <Text style={styles.headerTitle}>
+            {t("knowledge_check") || "MISSION QUIZ"}
+          </Text>
           <View style={styles.xpTag}>
             <QCoin width={16} height={16} />
-            <Text style={styles.xpText}>
-              {t("win_xp").replace("{xp}", quizData.xp_reward)}
-            </Text>
+            <Text style={styles.xpText}>+{QUEST_REWARD} QP</Text>
           </View>
         </View>
 
-        {/* Question Card */}
+        {/* Question */}
         <View style={styles.questionCard}>
-          <Text style={styles.questionLabel}>{t("question")}</Text>
+          <Text style={styles.questionLabel}>QUESTION</Text>
           <Text style={styles.questionText}>{quizData.quiz_question}</Text>
         </View>
 
@@ -147,7 +143,7 @@ export default function QuizScreen() {
             const isSelected = selectedAnswer === option;
             let optionStyle: any = styles.optionButton;
             let iconName = isSelected ? "dot-circle" : "circle";
-            let iconColor = isSelected ? "#4CAF50" : "#666";
+            let iconColor = isSelected ? "#7B1FA2" : "#666";
 
             if (resultState !== "none") {
               if (option === quizData.correct_answer) {
@@ -198,7 +194,7 @@ export default function QuizScreen() {
           })}
         </View>
 
-        {/* Result & Explanation Area */}
+        {/* Result Message */}
         {resultState !== "none" && (
           <View
             style={[
@@ -224,17 +220,17 @@ export default function QuizScreen() {
               />
               <Text style={styles.resultTitle}>
                 {resultState === "correct"
-                  ? t("excellent_work")
-                  : t("not_quite_right")}
+                  ? "Excellent Work!"
+                  : "Not Quite Right"}
               </Text>
             </View>
             <Text style={styles.explanationText}>
-              {quizData.quiz_explanation || t("review_lesson")}
+              {quizData.quiz_explanation}
             </Text>
           </View>
         )}
 
-        {/* Action Button */}
+        {/* Button */}
         <View style={{ height: 100 }}>
           {(selectedAnswer || resultState !== "none") && (
             <TouchableOpacity
@@ -245,18 +241,21 @@ export default function QuizScreen() {
                   : resultState === "incorrect"
                     ? styles.btnRetry
                     : styles.btnSubmit,
-                isOffline && { opacity: 0.5 },
               ]}
               onPress={resultState === "none" ? handleSubmit : handleContinue}
-              disabled={isOffline}
+              disabled={isSubmitting}
             >
-              <Text style={styles.actionButtonText}>
-                {resultState === "none"
-                  ? t("submit_answer")
-                  : resultState === "correct"
-                    ? t("claim_reward")
-                    : t("try_again")}
-              </Text>
+              {isSubmitting ? (
+                <ActivityIndicator color="black" />
+              ) : (
+                <Text style={styles.actionButtonText}>
+                  {resultState === "none"
+                    ? "SUBMIT ANSWER"
+                    : resultState === "correct"
+                      ? "CLAIM REWARD"
+                      : "TRY AGAIN"}
+                </Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -266,113 +265,106 @@ export default function QuizScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#151718" },
+  container: { flex: 1, backgroundColor: "#121212" },
   loadingContainer: {
     flex: 1,
-    backgroundColor: "#151718",
+    backgroundColor: "#121212",
     justifyContent: "center",
     alignItems: "center",
   },
-  scrollContainer: { padding: 20 },
-  offlineBanner: {
-    backgroundColor: "#C62828",
-    padding: 5,
-    alignItems: "center",
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  offlineText: { color: "white", fontWeight: "bold" },
+  scrollContainer: { padding: 24 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 30,
   },
   headerTitle: {
     color: "#888",
     fontSize: 12,
     fontWeight: "bold",
     fontFamily: PIXEL_FONT,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   xpTag: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#2C2C2E",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
-    gap: 6,
+    gap: 8,
     borderWidth: 1,
     borderColor: "#444",
   },
   xpText: {
     color: "#FFD700",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "bold",
     fontFamily: PIXEL_FONT,
   },
-  questionCard: { marginBottom: 25 },
+  questionCard: { marginBottom: 30 },
   questionLabel: {
-    color: "#4CAF50",
+    color: "#7B1FA2",
     fontSize: 12,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 10,
     fontFamily: PIXEL_FONT,
+    letterSpacing: 1,
   },
   questionText: {
     color: "white",
-    fontSize: 20,
-    fontWeight: "600",
-    lineHeight: 28,
+    fontSize: 22,
+    fontWeight: "bold",
+    lineHeight: 32,
   },
-  optionsContainer: { gap: 12, marginBottom: 20 },
+  optionsContainer: { gap: 16, marginBottom: 30 },
   optionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2C2C2E",
-    padding: 18,
-    borderRadius: 12,
+    backgroundColor: "#1E1E1E",
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: "#333",
   },
   optionSelected: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#253325",
-    padding: 18,
-    borderRadius: 12,
+    backgroundColor: "#2A1A35",
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: "#4CAF50",
+    borderColor: "#7B1FA2",
   },
   optionCorrect: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2E7D32",
-    padding: 18,
-    borderRadius: 12,
+    backgroundColor: "#1B5E20",
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: "#66BB6A",
+    borderColor: "#4CAF50",
   },
   optionIncorrect: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#C62828",
-    padding: 18,
-    borderRadius: 12,
+    backgroundColor: "#B71C1C",
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: "#EF5350",
   },
   optionDisabled: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2C2C2E",
-    padding: 18,
-    borderRadius: 12,
-    opacity: 0.5,
+    backgroundColor: "#1E1E1E",
+    padding: 20,
+    borderRadius: 24,
+    opacity: 0.4,
   },
-  optionText: { color: "#DDD", fontSize: 16, flex: 1 },
-  resultBox: { padding: 16, borderRadius: 12, marginTop: 10, marginBottom: 20 },
+  optionText: { color: "#DDD", fontSize: 16, flex: 1, fontWeight: "500" },
+  resultBox: { padding: 20, borderRadius: 24, marginTop: 10, marginBottom: 30 },
   resultBoxSuccess: {
     backgroundColor: "#1B5E20",
     borderWidth: 1,
@@ -386,30 +378,30 @@ const styles = StyleSheet.create({
   resultTitle: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 16,
-    marginLeft: 8,
+    fontSize: 18,
+    marginLeft: 10,
     fontFamily: PIXEL_FONT,
   },
   explanationText: {
     color: "#E0E0E0",
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
   },
   actionButton: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 30,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   btnSubmit: { backgroundColor: "#FFD700" },
   btnSuccess: { backgroundColor: "#4CAF50" },
   btnRetry: { backgroundColor: "#FFF" },
   actionButtonText: {
-    color: "#151718",
+    color: "#121212",
     fontSize: 16,
     fontWeight: "bold",
     fontFamily: PIXEL_FONT,

@@ -16,13 +16,12 @@ import { useCachedQuery } from "@/hooks/useCachedQuery";
 import { useTranslation } from "@/hooks/useTranslation";
 import { supabase } from "@/utils/supabase";
 
-// Assets
 import LeaderBoardIcon from "../assets/images/LeaderBoard.svg";
 import Qcoin from "../assets/images/Qcoin.svg";
 
 const PIXEL_FONT = "monospace";
+const QUEST_REWARD = 1000; // Force Display 1000
 
-// --- FETCHER ---
 const fetchQuestsData = async () => {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user?.id;
@@ -35,13 +34,13 @@ const fetchQuestsData = async () => {
 
   if (questError) throw questError;
 
-  // 2. Fetch Stats
+  // 2. Fetch User Data
   let completedIds = new Set();
   let userRank = "-";
   let userCoins = 0;
 
   if (userId) {
-    // A. Completed Quests
+    // Fetch Completed IDs
     const { data: userQuests } = await supabase
       .from("user_quests")
       .select("quest_id")
@@ -51,27 +50,28 @@ const fetchQuestsData = async () => {
       userQuests.forEach((uq) => completedIds.add(uq.quest_id));
     }
 
-    // B. User Coins
+    // Fetch User Score
     const { data: profile } = await supabase
-      .from("profiles")
-      .select("quest_coins")
+      .from("leaderboard_view")
+      .select("quest_coins, final_score")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
+
     userCoins = profile?.quest_coins || 0;
+    const finalScore = profile?.final_score || 0;
 
-    // C. Calculate Rank
-    const { count, error: rankError } = await supabase
-      .from("profiles")
+    // Fetch Rank
+    const { count } = await supabase
+      .from("leaderboard_view")
       .select("*", { count: "exact", head: true })
-      .gt("quest_coins", userCoins);
+      .gt("final_score", finalScore);
 
-    if (!rankError) {
-      userRank = ((count || 0) + 1).toString();
-    }
+    userRank = ((count || 0) + 1).toString();
   }
 
   const finalQuests = (questsData || []).map((q) => ({
     ...q,
+    xp_reward: QUEST_REWARD, // FORCE 1000
     isCompleted: completedIds.has(q.id),
   }));
 
@@ -83,7 +83,7 @@ export default function QuestsScreen() {
   const { t } = useTranslation();
 
   const { data, loading, isOffline, refresh, refreshing } = useCachedQuery(
-    "quests_page_premium",
+    "quests_page_v5_final",
     fetchQuestsData,
   );
 
@@ -116,7 +116,6 @@ export default function QuestsScreen() {
             tintColor="#7B1FA2"
           />
         }
-        showsVerticalScrollIndicator={false}
       >
         {isOffline && (
           <View style={styles.offlineBanner}>
@@ -124,9 +123,7 @@ export default function QuestsScreen() {
           </View>
         )}
 
-        {/* --- HEADER STATS --- */}
         <View style={styles.statsRow}>
-          {/* Points Pill */}
           <View style={styles.statPill}>
             <View style={styles.iconCircle}>
               <Qcoin width={20} height={20} />
@@ -139,7 +136,6 @@ export default function QuestsScreen() {
             </View>
           </View>
 
-          {/* Rank Pill */}
           <View style={[styles.statPill, styles.rankPill]}>
             <View style={[styles.iconCircle, styles.iconCircleGold]}>
               <FontAwesome5 name="trophy" size={14} color="#FFD700" />
@@ -155,7 +151,6 @@ export default function QuestsScreen() {
           </View>
         </View>
 
-        {/* --- LEADERBOARD BANNER --- */}
         <TouchableOpacity
           style={styles.leaderboardBanner}
           onPress={() => router.push("/leaderboard")}
@@ -163,20 +158,26 @@ export default function QuestsScreen() {
         >
           <View style={styles.lbContent}>
             <Text style={styles.lbTitle}>LEADERBOARD</Text>
-            <Text style={styles.lbDesc}>Compete with top farmers!</Text>
+            <Text style={styles.lbDesc}>
+              Your Rank:{" "}
+              <Text style={{ fontWeight: "bold", color: "#FFD700" }}>
+                #{userRank}
+              </Text>
+            </Text>
             <View style={styles.lbButton}>
-              <Text style={styles.lbButtonText}>VIEW RANKING</Text>
+              <Text style={styles.lbButtonText}>VIEW FULL RANKING</Text>
               <FontAwesome5 name="arrow-right" size={10} color="white" />
             </View>
           </View>
-          <LeaderBoardIcon width={90} height={90} style={styles.lbIcon} />
+          <View style={styles.lbIconContainer}>
+            <LeaderBoardIcon width={80} height={80} />
+          </View>
         </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>
           {t("monthly_quests") || "MONTHLY MISSIONS"}
         </Text>
 
-        {/* --- QUEST LIST --- */}
         {quests.map((quest) => (
           <TouchableOpacity
             key={quest.id}
@@ -190,14 +191,13 @@ export default function QuestsScreen() {
               if (!quest.isCompleted) {
                 router.push({
                   pathname: "/quest-details",
-                  params: { id: quest.id.toString() },
+                  params: { id: String(quest.id) },
                 });
               }
             }}
             activeOpacity={0.8}
-            disabled={quest.isCompleted} // <--- BLOCKS CLICK IF COMPLETED
+            disabled={quest.isCompleted} // <--- THIS LOCKS IT
           >
-            {/* Left Decor Bar */}
             <View
               style={[
                 styles.decorBar,
@@ -277,8 +277,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   offlineText: { color: "white", fontWeight: "bold" },
-
-  // Stats Row
   statsRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
   statPill: {
     flex: 1,
@@ -318,10 +316,8 @@ const styles = StyleSheet.create({
     fontFamily: PIXEL_FONT,
     marginTop: 2,
   },
-
-  // Leaderboard Banner
   leaderboardBanner: {
-    backgroundColor: "#FF8F00", // Premium Orange
+    backgroundColor: "#FF8F00",
     borderRadius: 20,
     padding: 20,
     flexDirection: "row",
@@ -333,9 +329,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    overflow: "hidden",
   },
-  lbContent: { flex: 1, zIndex: 2 },
+  lbContent: { flex: 1, paddingRight: 10 },
   lbTitle: {
     color: "white",
     fontSize: 18,
@@ -346,26 +341,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  lbDesc: { color: "rgba(255,255,255,0.9)", fontSize: 12, marginBottom: 12 },
+  lbDesc: { color: "rgba(255,255,255,0.9)", fontSize: 14, marginBottom: 12 },
   lbButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.2)",
     alignSelf: "flex-start",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 20,
     gap: 6,
   },
   lbButtonText: { color: "white", fontSize: 10, fontWeight: "bold" },
-  lbIcon: {
-    position: "absolute",
-    right: -10,
-    bottom: -10,
-    opacity: 0.9,
-    transform: [{ rotate: "-10deg" }],
-  },
-
+  lbIconContainer: { justifyContent: "center", alignItems: "center" },
   sectionTitle: {
     color: "#888",
     fontSize: 12,
@@ -374,8 +362,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
-
-  // Quest Cards
   questCard: {
     backgroundColor: "#1E1E1E",
     borderRadius: 16,
@@ -386,19 +372,16 @@ const styles = StyleSheet.create({
     borderColor: "#333",
     elevation: 4,
   },
-  questCardActive: { borderColor: "#7B1FA2", backgroundColor: "#241a2e" }, // Dark purple tint
+  questCardActive: { borderColor: "#7B1FA2", backgroundColor: "#241a2e" },
   questCardCompleted: {
     borderColor: "#2E7D32",
     backgroundColor: "#1B3E20",
     opacity: 0.8,
   },
-
   decorBar: { width: 6, height: "100%" },
   decorBarActive: { backgroundColor: "#7B1FA2" },
   decorBarCompleted: { backgroundColor: "#4CAF50" },
-
   cardInner: { flex: 1, padding: 16 },
-
   questHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -413,7 +396,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   textCompleted: { color: "#A5D6A7", textDecorationLine: "line-through" },
-
   statusBadgeActive: {
     backgroundColor: "rgba(123, 31, 162, 0.2)",
     paddingHorizontal: 8,
@@ -423,7 +405,6 @@ const styles = StyleSheet.create({
     borderColor: "#7B1FA2",
   },
   statusTextActive: { color: "#E1BEE7", fontSize: 10, fontWeight: "bold" },
-
   statusBadgeDone: {
     flexDirection: "row",
     alignItems: "center",
@@ -434,20 +415,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusTextDone: { color: "white", fontSize: 10, fontWeight: "bold" },
-
   questDescription: {
     color: "#B0B0B0",
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 12,
   },
-
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   rewardTag: {
     flexDirection: "row",
     alignItems: "center",
@@ -463,7 +441,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontFamily: PIXEL_FONT,
   },
-
   startBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
   startBtnText: {
     color: "#E0E0E0",

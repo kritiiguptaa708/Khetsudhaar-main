@@ -14,29 +14,49 @@ import {
 import { supabase } from "@/utils/supabase";
 import Qcoin from "../assets/images/Qcoin.svg";
 
+const QUEST_REWARD = 1000;
+
 export default function QuestDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
   const [quest, setQuest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
-    const fetchQuest = async () => {
+    const fetchQuestAndStatus = async () => {
       if (!id) return;
 
-      const { data, error } = await supabase
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+
+      // 1. Fetch Quest Info
+      const { data: questData, error } = await supabase
         .from("quests")
         .select("*")
         .eq("id", id)
         .single();
 
-      if (!error) {
-        setQuest(data);
+      if (questData) {
+        setQuest({ ...questData, xp_reward: QUEST_REWARD });
       }
+
+      // 2. Check if completed
+      if (userId) {
+        const { data: statusData } = await supabase
+          .from("user_quests")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("quest_id", id)
+          .maybeSingle();
+
+        if (statusData) setIsCompleted(true);
+      }
+
       setLoading(false);
     };
-    fetchQuest();
+    fetchQuestAndStatus();
   }, [id]);
 
   if (loading) {
@@ -62,7 +82,6 @@ export default function QuestDetailsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* --- Header / Back Button --- */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -70,49 +89,60 @@ export default function QuestDetailsScreen() {
           <FontAwesome5 name="arrow-left" size={20} color="white" />
         </TouchableOpacity>
 
-        {/* --- Hero Image / Icon --- */}
         <View style={styles.heroSection}>
-          <View style={styles.iconRing}>
+          <View
+            style={[styles.iconRing, isCompleted && styles.iconRingCompleted]}
+          >
             <FontAwesome5
-              name={quest.icon_type || "scroll"}
+              name={isCompleted ? "check" : quest.icon_type || "scroll"}
               size={50}
-              color="#E1BEE7"
+              color={isCompleted ? "#4CAF50" : "#E1BEE7"}
             />
           </View>
           <Text style={styles.questTitle}>{quest.title}</Text>
           <Text style={styles.questSubtitle}>
-            {quest.subtitle || "Mission Briefing"}
+            {isCompleted
+              ? "MISSION COMPLETE"
+              : quest.subtitle || "Mission Briefing"}
           </Text>
         </View>
 
-        {/* --- Reward Card --- */}
         <View style={styles.rewardCard}>
           <Text style={styles.rewardLabel}>COMPLETION REWARD</Text>
           <View style={styles.rewardRow}>
             <Qcoin width={40} height={40} />
-            <Text style={styles.rewardValue}>+{quest.xp_reward} QP</Text>
+            <Text
+              style={[styles.rewardValue, isCompleted && { color: "#4CAF50" }]}
+            >
+              +{quest.xp_reward} QP
+            </Text>
           </View>
         </View>
 
-        {/* --- Description --- */}
         <View style={styles.infoSection}>
           <Text style={styles.sectionHeader}>MISSION DETAILS</Text>
           <Text style={styles.description}>{quest.description}</Text>
         </View>
       </ScrollView>
 
-      {/* --- Footer Button --- */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.startButton}
-          onPress={() =>
-            router.push({ pathname: "/quest-quiz", params: { id: quest.id } })
-          }
-          activeOpacity={0.8}
-        >
-          <Text style={styles.btnText}>START MISSION</Text>
-          <FontAwesome5 name="play" size={14} color="white" />
-        </TouchableOpacity>
+        {isCompleted ? (
+          <View style={styles.completedButton}>
+            <Text style={styles.btnText}>MISSION ACCOMPLISHED</Text>
+            <FontAwesome5 name="check-circle" size={16} color="white" />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={() =>
+              router.push({ pathname: "/quest-quiz", params: { id: quest.id } })
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.btnText}>START MISSION</Text>
+            <FontAwesome5 name="play" size={14} color="white" />
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -127,7 +157,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scrollContent: { padding: 24, paddingBottom: 100 },
-
   backButton: {
     width: 40,
     height: 40,
@@ -137,7 +166,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-
   heroSection: { alignItems: "center", marginTop: 20, marginBottom: 40 },
   iconRing: {
     width: 100,
@@ -153,6 +181,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 15,
   },
+  iconRingCompleted: {
+    backgroundColor: "rgba(76, 175, 80, 0.2)",
+    borderColor: "#4CAF50",
+    shadowColor: "#4CAF50",
+  },
   questTitle: {
     color: "white",
     fontSize: 24,
@@ -167,7 +200,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontWeight: "600",
   },
-
   rewardCard: {
     backgroundColor: "#1E1E1E",
     borderRadius: 16,
@@ -191,7 +223,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontFamily: "monospace",
   },
-
   infoSection: { marginBottom: 20 },
   sectionHeader: {
     color: "#888",
@@ -201,7 +232,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   description: { color: "#E0E0E0", fontSize: 16, lineHeight: 26 },
-
   footer: {
     position: "absolute",
     bottom: 0,
@@ -221,6 +251,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 10,
     elevation: 5,
+  },
+  completedButton: {
+    backgroundColor: "#2E7D32",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 10,
+    opacity: 0.8,
   },
   btnText: {
     color: "white",
