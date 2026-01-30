@@ -1,4 +1,4 @@
-import { FontAwesome5 } from "@expo/vector-icons";
+import { FontAwesome5 } from "@expo/vector-icons"; // Ensure this is imported
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
@@ -28,14 +28,23 @@ import Reward from "../assets/images/Reward.svg";
 
 const PIXEL_FONT = "monospace";
 
-// 1. Define the shape of a Lesson from Supabase
-interface Lesson {
+// --- TYPES ---
+interface QuestDetail {
   id: number;
+  title: string;
+  description: string;
+}
+
+interface LessonDetail {
+  id: number;
+  title: string;
+  description: string;
   sequence: number;
-  title_en: string;
-  title_hi: string;
-  description_en: string;
-  description_hi: string;
+}
+
+interface ActiveQuestData {
+  status: string;
+  quest: QuestDetail | null;
 }
 
 type UserProgress = {
@@ -43,26 +52,26 @@ type UserProgress = {
   completed_lessons: number;
   user_coins: number;
   user_name: string;
-  next_lesson: Lesson | null;
+  active_quest: QuestDetail | null;
+  next_lesson: LessonDetail | null;
 };
 
-// --- DATA FETCHER ---
+// --- DATA FETCHERS ---
 const fetchUserProgress = async (): Promise<UserProgress> => {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
 
-  // Default state if not logged in
-  if (!userId) {
+  if (!userId)
     return {
       total_lessons: 0,
       completed_lessons: 0,
       user_coins: 0,
       user_name: "FARMER",
+      active_quest: null,
       next_lesson: null,
     };
-  }
 
-  // A. Fetch User Profile
+  // 1. Profile
   const { data: profileData } = await supabase
     .from("profiles")
     .select("coins, full_name")
@@ -72,39 +81,91 @@ const fetchUserProgress = async (): Promise<UserProgress> => {
   const user_coins = profileData?.coins || 0;
   const user_name = profileData?.full_name || "FARMER";
 
-  [cite_start]; // B. Fetch All Lessons (Dynamic from Supabase) [cite: 1]
-  const { data: allLessons, error: lessonError } = await supabase
+  // 2. Lessons Counts & Next Lesson Logic
+  const { count: total_lessons } = await supabase
     .from("lessons")
-    .select("id, sequence, title_en, title_hi, description_en, description_hi")
-    .order("sequence", { ascending: true });
+    .select("*", { count: "exact", head: true });
 
-  if (lessonError) console.error("Error fetching lessons:", lessonError);
-
-  const lessons = allLessons || [];
-  const total_lessons = lessons.length;
-
-  // C. Fetch Completed Lessons
   const { data: userLessons } = await supabase
     .from("user_lessons")
     .select("lesson_id")
     .eq("user_id", userId);
 
-  const completedIds = new Set(userLessons?.map((ul) => ul.lesson_id) || []);
-  const completed_lessons = completedIds.size;
+  const completedIds = userLessons?.map((ul) => ul.lesson_id) || [];
+  const completed_lessons = completedIds.length;
 
-  // D. Find the Next Lesson
-  // The first lesson in the sorted list that hasn't been completed yet
-  const nextLessonData = lessons.find((l) => !completedIds.has(l.id)) || null;
+  let nextLessonData: LessonDetail | null = null;
+  let maxSeq = 0;
+
+  if (completedIds.length > 0) {
+    const { data: completedSeqsData } = await supabase
+      .from("lessons")
+      .select("sequence")
+      .in("id", completedIds);
+
+    if (completedSeqsData) {
+      maxSeq = completedSeqsData.reduce(
+        (max, current) => Math.max(max, current.sequence),
+        0,
+      );
+    }
+  }
+
+  const { data: next } = await supabase
+    .from("lessons")
+    .select("id, title_en, description_en, sequence")
+    .gt("sequence", maxSeq)
+    .order("sequence", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (next) {
+    nextLessonData = {
+      id: next.id,
+      title: next.title_en || "Next Lesson",
+      description: next.description_en || "Continue your journey.",
+      sequence: next.sequence,
+    };
+  } else if (completed_lessons === 0) {
+    const { data: first } = await supabase
+      .from("lessons")
+      .select("id, title_en, description_en, sequence")
+      .eq("sequence", 1)
+      .maybeSingle();
+
+    if (first) {
+      nextLessonData = {
+        id: first.id,
+        title: first.title_en,
+        description: first.description_en,
+        sequence: first.sequence,
+      };
+    }
+  }
+
+  // 3. Active Quest
+  let active_quest: QuestDetail | null = null;
+  const { data: userQuests } = (await supabase
+    .from("user_quests")
+    .select("status, quest:quests(id, title, description)")) as {
+    data: ActiveQuestData[] | null;
+  };
+
+  if (userQuests && userQuests.length > 0) {
+    active_quest = userQuests[0].quest;
+  }
 
   return {
-    total_lessons,
-    completed_lessons,
+    total_lessons: total_lessons || 0,
+    completed_lessons: completed_lessons || 0,
     user_coins,
     user_name,
+    active_quest,
     next_lesson: nextLessonData,
   };
 };
 
+// --- COMPONENTS ---
 const Header = ({ coins, name }: { coins: number; name: string }) => (
   <View style={styles.header}>
     <View>
@@ -127,18 +188,17 @@ const HubButton = ({ icon, label, onPress, style, textStyle }: any) => (
   </TouchableOpacity>
 );
 
+// --- MAIN SCREEN ---
 export default function DashboardScreen() {
   const router = useRouter();
-  // Get language to show correct title/desc
-  const { t, language, isLoading: isTransLoading } = useTranslation();
-  const isHindi = language === "hi";
+  const { t, isLoading: isTransLoading } = useTranslation();
 
   const {
     data: progressData,
     loading: progressLoading,
     refresh: refreshProgress,
     refreshing,
-  } = useCachedQuery(`dashboard_progress_dynamic`, fetchUserProgress);
+  } = useCachedQuery(`dashboard_progress_v4`, fetchUserProgress);
 
   const handleRefresh = async () => {
     await refreshProgress();
@@ -155,22 +215,11 @@ export default function DashboardScreen() {
   const completed = progressData?.completed_lessons || 0;
   const total = progressData?.total_lessons || 0;
   const nextLesson = progressData?.next_lesson;
+  const activeQuest = progressData?.active_quest;
   const coins = progressData?.user_coins || 0;
   const userName = progressData?.user_name || "FARMER";
 
   const progressPercent = total > 0 ? (completed / total) * 100 : 0;
-
-  // Localize the next lesson content
-  const lessonTitle = nextLesson
-    ? isHindi
-      ? nextLesson.title_hi
-      : nextLesson.title_en
-    : "";
-  const lessonDesc = nextLesson
-    ? isHindi
-      ? nextLesson.description_hi
-      : nextLesson.description_en
-    : "";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -203,39 +252,48 @@ export default function DashboardScreen() {
               }
             >
               <View style={[styles.heroBadge, { backgroundColor: "#388e3c" }]}>
-                <Text style={styles.heroBadgeText}>
-                  {t("continue_learning") || "CONTINUE LEARNING"}
-                </Text>
+                <Text style={styles.heroBadgeText}>CONTINUE LEARNING</Text>
               </View>
               <View style={styles.heroContent}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.heroTitle}>
-                    {t("lessons") || "LESSON"} {nextLesson.sequence}
+                    LESSON {nextLesson.sequence}
                   </Text>
                   <Text style={styles.heroDesc} numberOfLines={2}>
-                    {lessonTitle}
-                  </Text>
-                  {/* Optional: Show description if space permits, or just title */}
-                  <Text
-                    style={[
-                      styles.heroDesc,
-                      { fontSize: 10, marginTop: 4, opacity: 0.8 },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {lessonDesc}
+                    {nextLesson.title}
                   </Text>
                 </View>
                 <Lessons width={40} height={40} />
               </View>
             </TouchableOpacity>
+          ) : activeQuest ? (
+            <TouchableOpacity
+              style={[styles.heroCard, styles.questCard]}
+              onPress={() =>
+                router.push({
+                  pathname: "/quest-details",
+                  params: { id: activeQuest.id.toString() },
+                })
+              }
+            >
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>ACTIVE MISSION</Text>
+              </View>
+              <View style={styles.heroContent}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroTitle}>{activeQuest.title}</Text>
+                  <Text style={styles.heroDesc} numberOfLines={2}>
+                    {activeQuest.description}
+                  </Text>
+                </View>
+                <Quest width={40} height={40} />
+              </View>
+            </TouchableOpacity>
           ) : (
             <View style={[styles.heroCard, { backgroundColor: "#333" }]}>
-              <Text style={styles.heroTitle}>
-                {t("completed_lesson_title") || "ALL CAUGHT UP!"}
-              </Text>
+              <Text style={styles.heroTitle}>ALL CAUGHT UP!</Text>
               <Text style={styles.heroDesc}>
-                {t("great_job") || "You have completed all available lessons."}
+                You have completed all lessons.
               </Text>
             </View>
           )}
@@ -249,13 +307,12 @@ export default function DashboardScreen() {
             />
           </View>
           <Text style={styles.progressText}>
-            {completed} / {total} {t("lessons") || "LESSONS COMPLETED"}
+            {completed} / {total} LESSONS COMPLETED
           </Text>
         </View>
 
         {/* HUB GRID */}
         <View style={styles.gridContainer}>
-          {/* Row 1: Quests & Leaderboard */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("monthly_quests")}
@@ -273,12 +330,12 @@ export default function DashboardScreen() {
             />
           </View>
 
-          {/* NEW ROW: Government Schemes */}
+          {/* --- MISSING BUTTON ADDED HERE --- */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("schemes_title") || "Govt Schemes"}
               icon={<FontAwesome5 name="university" size={40} color="white" />}
-              onPress={() => router.push("/schemes" as any)}
+              onPress={() => router.push("/schemes/index" as any)}
               style={[
                 styles.buttonRect,
                 {
@@ -290,7 +347,6 @@ export default function DashboardScreen() {
             />
           </View>
 
-          {/* Row 3: Rewards */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("rewards")}
@@ -301,7 +357,6 @@ export default function DashboardScreen() {
             />
           </View>
 
-          {/* Row 4: Lessons */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("lessons")}
@@ -317,7 +372,6 @@ export default function DashboardScreen() {
             />
           </View>
 
-          {/* Row 5: Market Prices */}
           <View style={styles.gridRow}>
             <HubButton
               label={t("market_prices")}
@@ -394,6 +448,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
+  },
+  questCard: {
+    backgroundColor: "#2E1A47",
+    borderColor: "#7B1FA2",
+    shadowColor: "#7B1FA2",
   },
   lessonHeroCard: {
     backgroundColor: "#1B3E20",
