@@ -1,145 +1,244 @@
-import { FontAwesome5 } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import { FontAwesome5 } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  ImageBackground,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
 
-import { DEFAULT_LANGUAGE } from '@/constants/translations';
-import { useCachedQuery } from '@/hooks/useCachedQuery';
-import { useTranslation } from '@/hooks/useTranslation';
-import { supabase } from '@/utils/supabase';
+import { DEFAULT_LANGUAGE } from "@/constants/translations";
+import { useCachedQuery } from "@/hooks/useCachedQuery";
+import { useTranslation } from "@/hooks/useTranslation";
+import { supabase } from "@/utils/supabase";
+import { ResizeMode, Video } from "expo-av";
 
 interface LessonDetail {
   id: number;
   title: string;
   description: string;
   sequence: number;
-  content: string; 
+  content: string;
   points: number;
 }
 
 const fetchLessonDetail = async (idStr: string, lang: string) => {
-    const lessonId = parseInt(idStr);
-    
-    // Dynamic Columns
-    const titleCol = `title_${lang}`;
-    const descCol = `description_${lang}`;
-    const contentCol = `content_${lang}`;
-    const fallbackTitle = `title_${DEFAULT_LANGUAGE}`;
-    const fallbackDesc = `description_${DEFAULT_LANGUAGE}`;
-    const fallbackContent = `content_${DEFAULT_LANGUAGE}`;
+  const lessonId = parseInt(idStr);
 
-    const { data: lessonRaw, error } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('id', lessonId)
-        .single();
-    
-    if (error) throw error;
+  // Dynamic Columns
+  const titleCol = `title_${lang}`;
+  const descCol = `description_${lang}`;
+  const contentCol = `content_${lang}`;
+  const fallbackTitle = `title_${DEFAULT_LANGUAGE}`;
+  const fallbackDesc = `description_${DEFAULT_LANGUAGE}`;
+  const fallbackContent = `content_${DEFAULT_LANGUAGE}`;
 
-    const lesson: LessonDetail = {
-        id: lessonRaw.id,
-        sequence: lessonRaw.sequence,
-        points: lessonRaw.points,
-        title: lessonRaw[titleCol] || lessonRaw[fallbackTitle] || "Lesson",
-        description: lessonRaw[descCol] || lessonRaw[fallbackDesc] || "",
-        content: lessonRaw[contentCol] || lessonRaw[fallbackContent] || ""
-    };
+  const { data: lessonRaw, error } = await supabase
+    .from("lessons")
+    .select("*")
+    .eq("id", lessonId)
+    .single();
 
-    let isCompleted = false;
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session?.user.id) {
-        const { data } = await supabase
-            .from('user_lessons')
-            .select('id')
-            .eq('user_id', sessionData.session.user.id)
-            .eq('lesson_id', lessonId)
-            .maybeSingle();
-        if (data) isCompleted = true;
-    }
+  if (error) throw error;
 
-    return { lesson, isCompleted };
+  const lesson: LessonDetail = {
+    id: lessonRaw.id,
+    sequence: lessonRaw.sequence,
+    points: lessonRaw.points,
+    title: lessonRaw[titleCol] || lessonRaw[fallbackTitle] || "Lesson",
+    description: lessonRaw[descCol] || lessonRaw[fallbackDesc] || "",
+    content: lessonRaw[contentCol] || lessonRaw[fallbackContent] || "",
+  };
+
+  let isCompleted = false;
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.user.id) {
+    const { data } = await supabase
+      .from("user_lessons")
+      .select("id")
+      .eq("user_id", sessionData.session.user.id)
+      .eq("lesson_id", lessonId)
+      .maybeSingle();
+    if (data) isCompleted = true;
+  }
+
+  return { lesson, isCompleted };
+};
+// Helper to select image based on Lesson ID
+const getLessonImage = (id: number) => {
+  switch (id) {
+    case 1:
+      return require("../../assets/images/Thumbnails/L1 thumb.png");
+    case 2:
+      return require("../../assets/images/Thumbnails/L2 thumb.png");
+    case 4:
+      return require("../../assets/images/Thumbnails/L3 thumb.png");
+    case 3:
+      return require("../../assets/images/Thumbnails/L4 THUMB.png");
+  }
 };
 
+const getLessonVideo = (id: number) => {
+  switch (id) {
+    case 1:
+      return require("../../assets/images/Thumbnails/L1video.mp4");
+    default:
+      return null; // No video for other lessons yet
+  }
+};
 export default function LessonDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language, isLoading: isTransLoading } = useTranslation();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<Video>(null);
 
   const { data, loading, isOffline } = useCachedQuery(
     `lesson_detail_${id}_${language || DEFAULT_LANGUAGE}`,
-    () => fetchLessonDetail(id!, language || DEFAULT_LANGUAGE)
+    () => fetchLessonDetail(id!, language || DEFAULT_LANGUAGE),
   );
 
   const lesson = data?.lesson;
   const isCompleted = data?.isCompleted;
-
+  const videoSource = lesson ? getLessonVideo(lesson.id) : null;
   const handleTakeQuiz = () => {
     if (!lesson) return;
     // Special case for ID 2 (Game) if needed, otherwise normal quiz
     if (lesson.id === 2) {
-       router.push({ pathname: '/game/[id]', params: { id: lesson.id.toString() } });
+      router.push({
+        pathname: "/game/[id]",
+        params: { id: lesson.id.toString() },
+      });
     } else {
-       router.push({ pathname: '/quiz/[id]', params: { id: lesson.id.toString() } });
+      router.push({
+        pathname: "/quiz/[id]",
+        params: { id: lesson.id.toString() },
+      });
     }
   };
 
   if ((loading || isTransLoading) && !lesson) {
-    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#388e3c" />
+      </View>
+    );
   }
 
-  if (!lesson) return <View style={styles.loadingContainer}><Text style={{color:'white'}}>Lesson not found</Text></View>;
+  if (!lesson)
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={{ color: "white" }}>Lesson not found</Text>
+      </View>
+    );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {isOffline && <View style={styles.offlineBanner}><Text style={styles.offlineText}>{t('offline_mode')}</Text></View>}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>{t("offline_mode")}</Text>
+          </View>
+        )}
 
         <View style={styles.headerRow}>
           <Text style={styles.bigNumber}>{lesson.sequence}</Text>
-          <View style={{flex: 1}}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{lesson.title}</Text>
             <Text style={styles.headerDescription}>{lesson.description}</Text>
           </View>
         </View>
 
-        <View style={styles.videoPlaceholder}>
-          <FontAwesome5 name="play" size={40} color="white" />
+        {/* Dynamic Lesson Image with Play Button */}
+        <View style={styles.mediaContainer}>
+          {isPlaying && videoSource ? (
+            <Video
+              ref={videoRef}
+              style={styles.videoPlayer}
+              source={videoSource}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              isLooping={false}
+              shouldPlay={true}
+            />
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                if (videoSource) setIsPlaying(true);
+                else alert("No video found for this lesson.");
+              }}
+              style={styles.thumbnailContainer}
+            >
+              <ImageBackground
+                source={getLessonImage(lesson.id)}
+                style={styles.lessonImage}
+                imageStyle={{ borderRadius: 16 }}
+              >
+                <View style={styles.playButtonContainer}>
+                  <FontAwesome5
+                    name="play"
+                    size={30}
+                    color="white"
+                    style={{ marginLeft: 4 }}
+                  />
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.contentContainer}>
-            {lesson.content?.replace(/\\n/g, '\n').split('\n').map((line, index) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('##')) {
-                  return <Text key={index} style={styles.contentHeader}>{trimmed.replace(/##/g, '').trim()}</Text>;
-                } else if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
-                  return (
-                      <View key={index} style={styles.bulletRow}>
-                      <Text style={styles.bulletPoint}>•</Text>
-                      <Text style={styles.contentText}>{trimmed.replace(/^-/, '').trim()}</Text>
-                      </View>
-                  );
-                } else if (trimmed.length > 0) {
-                  return <Text key={index} style={styles.contentText}>{trimmed}</Text>;
-                }
-                return <View key={index} style={{ height: 8 }} />;
+          {lesson.content
+            ?.replace(/\\n/g, "\n")
+            .split("\n")
+            .map((line, index) => {
+              const trimmed = line.trim();
+              if (trimmed.startsWith("##")) {
+                return (
+                  <Text key={index} style={styles.contentHeader}>
+                    {trimmed.replace(/##/g, "").trim()}
+                  </Text>
+                );
+              } else if (trimmed.startsWith("-") || trimmed.startsWith("•")) {
+                return (
+                  <View key={index} style={styles.bulletRow}>
+                    <Text style={styles.bulletPoint}>•</Text>
+                    <Text style={styles.contentText}>
+                      {trimmed.replace(/^-/, "").trim()}
+                    </Text>
+                  </View>
+                );
+              } else if (trimmed.length > 0) {
+                return (
+                  <Text key={index} style={styles.contentText}>
+                    {trimmed}
+                  </Text>
+                );
+              }
+              return <View key={index} style={{ height: 8 }} />;
             })}
         </View>
 
-        <TouchableOpacity 
-          style={[styles.actionButton, (isCompleted || isOffline) && styles.actionButtonCompleted]}
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            (isCompleted || isOffline) && styles.actionButtonCompleted,
+          ]}
           onPress={handleTakeQuiz}
-          disabled={isOffline} 
+          disabled={isOffline}
         >
           <Text style={styles.actionButtonText}>
-             {isCompleted ? "PRACTICE QUIZ" : (lesson.id === 2 ? "START FARMING" : t('take_quiz'))}
+            {isCompleted
+              ? "PRACTICE QUIZ"
+              : lesson.id === 2
+                ? "START FARMING"
+                : t("take_quiz")}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -148,22 +247,106 @@ export default function LessonDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#1C1C1E' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1C1C1E' },
+  safeArea: { flex: 1, backgroundColor: "#1C1C1E" },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#1C1C1E",
+  },
   scrollContainer: { padding: 20, paddingBottom: 40 },
-  offlineBanner: { backgroundColor: '#C62828', padding: 5, alignItems: 'center', borderRadius: 5, marginBottom: 10 },
-  offlineText: { color: 'white', fontWeight: 'bold' },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
-  bigNumber: { color: 'white', fontSize: 80, fontWeight: '900', marginRight: 15, lineHeight: 85 },
-  headerTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', marginTop: 10, lineHeight: 28 },
-  headerDescription: { color: '#B0B0B0', fontSize: 16, marginTop: 8, lineHeight: 22, fontStyle: 'italic' },
-  videoPlaceholder: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#388E3C', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  offlineBanner: {
+    backgroundColor: "#C62828",
+    padding: 5,
+    alignItems: "center",
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  offlineText: { color: "white", fontWeight: "bold" },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 20,
+  },
+  bigNumber: {
+    color: "white",
+    fontSize: 80,
+    fontWeight: "900",
+    marginRight: 15,
+    lineHeight: 85,
+  },
+  headerTitle: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginTop: 10,
+    lineHeight: 28,
+  },
+  headerDescription: {
+    color: "#B0B0B0",
+    fontSize: 16,
+    marginTop: 8,
+    lineHeight: 22,
+    fontStyle: "italic",
+  },
+  mediaContainer: {
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "black",
+  },
+  thumbnailContainer: { width: "100%" },
+  lessonImage: {
+    width: "100%",
+    height: 220,
+    backgroundColor: "#2C2C2E",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  videoPlayer: { width: "100%", height: 220, backgroundColor: "black" },
+  playButtonContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
   contentContainer: { marginBottom: 30 },
-  contentHeader: { color: 'white', fontSize: 18, fontWeight: 'bold', marginTop: 20, marginBottom: 10 },
-  contentText: { color: '#E0E0E0', fontSize: 16, lineHeight: 24, marginBottom: 10 },
-  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, paddingLeft: 8 },
-  bulletPoint: { color: '#E0E0E0', fontSize: 16, marginRight: 8 },
-  actionButton: { backgroundColor: '#388E3C', paddingVertical: 18, borderRadius: 30, alignItems: 'center', marginTop: 10 },
-  actionButtonCompleted: { backgroundColor: '#555' },
-  actionButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold', letterSpacing: 1 },
+  contentHeader: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  contentText: {
+    color: "#E0E0E0",
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 10,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    paddingLeft: 8,
+  },
+  bulletPoint: { color: "#E0E0E0", fontSize: 16, marginRight: 8 },
+  actionButton: {
+    backgroundColor: "#388E3C",
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  actionButtonCompleted: { backgroundColor: "#555" },
+  actionButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
 });

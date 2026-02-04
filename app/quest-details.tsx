@@ -1,8 +1,6 @@
-import { useCachedQuery } from '@/hooks/useCachedQuery';
-import { supabase } from '@/utils/supabase';
-import { FontAwesome5 } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import { FontAwesome5 } from "@expo/vector-icons";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     SafeAreaView,
@@ -10,142 +8,264 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
-} from 'react-native';
-import Coin from '../assets/images/Qcoin.svg';
+    View,
+} from "react-native";
 
-const PIXEL_FONT = 'monospace';
+import { supabase } from "@/utils/supabase";
+import Qcoin from "../assets/images/Qcoin.svg";
 
-const fetchQuestDetails = async (id: string) => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    
-    const { data: questData, error } = await supabase
-        .from('quests')
-        .select('*')
-        .eq('id', id)
-        .single();
-    
-    if (error) throw error;
-
-    let isCompleted = false;
-    if (sessionData.session?.user?.id) {
-        const { data } = await supabase
-            .from('user_quests')
-            .select('id')
-            .eq('user_id', sessionData.session.user.id)
-            .eq('quest_id', id)
-            .maybeSingle();
-        if (data) isCompleted = true;
-    }
-
-    return { quest: questData, isCompleted };
-};
+const QUEST_REWARD = 1000;
 
 export default function QuestDetailsScreen() {
-    const router = useRouter();
-    const { id } = useLocalSearchParams<{id: string}>(); 
-    
-    const { data, loading, isOffline } = useCachedQuery(
-        `quest_detail_${id}`,
-        () => fetchQuestDetails(id!)
-    );
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
 
-    const quest = data?.quest;
-    const isCompleted = data?.isCompleted;
+  const [quest, setQuest] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isCompleted, setIsCompleted] = useState(false);
 
-    const handleAction = () => {
-        if (isCompleted) {
-            router.back();
-        } else {
-            if(isOffline) return; // Cannot take quiz offline
-            router.push({ pathname: '/quest-quiz', params: { id: id } });
-        }
+  useEffect(() => {
+    const fetchQuestAndStatus = async () => {
+      if (!id) return;
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+
+      // 1. Fetch Quest Info
+      const { data: questData, error } = await supabase
+        .from("quests")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (questData) {
+        setQuest({ ...questData, xp_reward: QUEST_REWARD });
+      }
+
+      // 2. Check if completed
+      if (userId) {
+        const { data: statusData } = await supabase
+          .from("user_quests")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("quest_id", id)
+          .maybeSingle();
+
+        if (statusData) setIsCompleted(true);
+      }
+
+      setLoading(false);
     };
+    fetchQuestAndStatus();
+  }, [id]);
 
-    if (loading && !quest) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
-    if (!quest) return <SafeAreaView style={styles.loadingContainer}><Text style={{color:'white'}}>Quest not found.</Text></SafeAreaView>;
-
+  if (loading) {
     return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContainer}>
-                {isOffline && <View style={styles.offlineBanner}><Text style={styles.offlineText}>Offline Mode</Text></View>}
-
-                <View style={styles.mainCard}>
-                    <View style={styles.titleRow}>
-                        <FontAwesome5 name="seedling" size={24} color="#4CAF50" style={{marginRight: 10}} />
-                        <Text style={styles.questTitle}>{quest.title}</Text>
-                    </View>
-                    <View style={styles.rewardBox}>
-                        <Text style={styles.rewardLabel}>REWARD:</Text>
-                        <Coin width={20} height={20} />
-                        <Text style={styles.rewardValue}>{quest.xp_reward} XP</Text>
-                    </View>
-                    <Text style={styles.statusText}>STATUS: {isCompleted ? 'COMPLETED' : 'PENDING VERIFICATION'}</Text>
-                    <View style={styles.progressBarBg}>
-                        <View style={[styles.progressBarFill, { width: isCompleted ? '100%' : '0%' }]} />
-                    </View>
-                </View>
-
-                <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitle}>MISSION BRIEF</Text>
-                    <Text style={styles.descriptionText}>{quest.description}</Text>
-                </View>
-
-                <View style={styles.stepsSection}>
-                    <Text style={styles.sectionTitle}>TASKS</Text>
-                    <View style={styles.stepRow}>
-                        <FontAwesome5 name={isCompleted ? "check-circle" : "circle"} size={16} color={isCompleted ? "#4CAF50" : "#888"} />
-                        <Text style={styles.stepText}>Complete the learning module</Text>
-                    </View>
-                    <View style={styles.stepRow}>
-                        <FontAwesome5 name={isCompleted ? "check-circle" : "circle"} size={16} color={isCompleted ? "#4CAF50" : "#888"} />
-                        <Text style={styles.stepText}>Pass the verification quiz</Text>
-                    </View>
-                </View>
-
-                <View style={styles.actionContainer}>
-                    <View style={styles.divider} />
-                    <TouchableOpacity 
-                        style={[styles.actionButton, (isCompleted || isOffline) && styles.actionButtonCompleted]} 
-                        onPress={handleAction}
-                        disabled={isCompleted || isOffline}
-                    >
-                        <Text style={styles.actionButtonText}>
-                            {isCompleted ? 'QUEST COMPLETED' : isOffline ? 'GO ONLINE' : 'TAKE QUIZ TO VERIFY'}
-                        </Text>
-                        {!isCompleted && !isOffline && <FontAwesome5 name="arrow-right" size={16} color="white" style={{marginLeft: 10}} />}
-                    </TouchableOpacity>
-                </View>
-
-            </ScrollView>
-        </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#7B1FA2" />
+      </View>
     );
+  }
+
+  if (!quest) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: "white", textAlign: "center", marginTop: 50 }}>
+          Quest not found.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <FontAwesome5 name="arrow-left" size={20} color="white" />
+        </TouchableOpacity>
+
+        <View style={styles.heroSection}>
+          <View
+            style={[styles.iconRing, isCompleted && styles.iconRingCompleted]}
+          >
+            <FontAwesome5
+              name={isCompleted ? "check" : quest.icon_type || "scroll"}
+              size={50}
+              color={isCompleted ? "#4CAF50" : "#E1BEE7"}
+            />
+          </View>
+          <Text style={styles.questTitle}>{quest.title}</Text>
+          <Text style={styles.questSubtitle}>
+            {isCompleted
+              ? "MISSION COMPLETE"
+              : quest.subtitle || "Mission Briefing"}
+          </Text>
+        </View>
+
+        <View style={styles.rewardCard}>
+          <Text style={styles.rewardLabel}>COMPLETION REWARD</Text>
+          <View style={styles.rewardRow}>
+            <Qcoin width={40} height={40} />
+            <Text
+              style={[styles.rewardValue, isCompleted && { color: "#4CAF50" }]}
+            >
+              +{quest.xp_reward} QP
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.infoSection}>
+          <Text style={styles.sectionHeader}>MISSION DETAILS</Text>
+          <Text style={styles.description}>{quest.description}</Text>
+        </View>
+      </ScrollView>
+
+      <View style={styles.footer}>
+        {isCompleted ? (
+          <View style={styles.completedButton}>
+            <Text style={styles.btnText}>MISSION ACCOMPLISHED</Text>
+            <FontAwesome5 name="check-circle" size={16} color="white" />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.startButton}
+            onPress={() =>
+              router.push({ pathname: "/quest-quiz", params: { id: quest.id } })
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.btnText}>START MISSION</Text>
+            <FontAwesome5 name="play" size={14} color="white" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#151718' },
-    loadingContainer: { flex: 1, backgroundColor: '#151718', justifyContent: 'center', alignItems: 'center' },
-    scrollContainer: { padding: 20 },
-    offlineBanner: { backgroundColor: '#C62828', padding: 5, alignItems: 'center', borderRadius: 5, marginBottom: 10 },
-    offlineText: { color: 'white', fontWeight: 'bold' },
-    mainCard: { backgroundColor: '#2C2C2E', borderRadius: 20, padding: 20, marginBottom: 25, borderWidth: 2, borderColor: '#4CAF50' },
-    titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-    questTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', fontFamily: PIXEL_FONT, flex: 1 },
-    rewardBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.1)', padding: 10, borderRadius: 10, marginBottom: 15 },
-    rewardLabel: { color: '#4CAF50', fontWeight: 'bold', marginRight: 5 },
-    rewardValue: { color: 'white', fontWeight: '900', marginLeft: 5, fontFamily: PIXEL_FONT },
-    statusText: { color: '#B0B0B0', fontSize: 12, marginBottom: 8, fontFamily: PIXEL_FONT },
-    progressBarBg: { height: 8, backgroundColor: '#333', borderRadius: 4 },
-    progressBarFill: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 4 },
-    infoSection: { marginBottom: 25 },
-    sectionTitle: { color: '#3498DB', fontSize: 16, fontWeight: 'bold', fontFamily: PIXEL_FONT, marginBottom: 10, textTransform: 'uppercase' },
-    descriptionText: { color: '#DEDEDE', fontSize: 16, lineHeight: 24 },
-    stepsSection: { marginBottom: 30 },
-    stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, paddingLeft: 10 },
-    stepText: { color: '#EEE', marginLeft: 10, fontSize: 15 },
-    actionContainer: { marginTop: 10 },
-    divider: { height: 1, backgroundColor: '#333', marginBottom: 20 },
-    actionButton: { flexDirection: 'row', backgroundColor: '#FFC107', paddingVertical: 16, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-    actionButtonCompleted: { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' },
-    actionButtonText: { color: '#151718', fontSize: 16, fontWeight: 'bold', fontFamily: PIXEL_FONT },
+  container: { flex: 1, backgroundColor: "#121212" },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#121212",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scrollContent: { padding: 24, paddingBottom: 100 },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  heroSection: { alignItems: "center", marginTop: 20, marginBottom: 40 },
+  iconRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(123, 31, 162, 0.2)",
+    borderWidth: 2,
+    borderColor: "#7B1FA2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+    shadowColor: "#7B1FA2",
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+  },
+  iconRingCompleted: {
+    backgroundColor: "rgba(76, 175, 80, 0.2)",
+    borderColor: "#4CAF50",
+    shadowColor: "#4CAF50",
+  },
+  questTitle: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  questSubtitle: {
+    color: "#B39DDB",
+    fontSize: 14,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    fontWeight: "600",
+  },
+  rewardCard: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 30,
+  },
+  rewardLabel: {
+    color: "#888",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
+  rewardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  rewardValue: {
+    color: "#FFD700",
+    fontSize: 32,
+    fontWeight: "bold",
+    fontFamily: "monospace",
+  },
+  infoSection: { marginBottom: 20 },
+  sectionHeader: {
+    color: "#888",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
+  description: { color: "#E0E0E0", fontSize: 16, lineHeight: 26 },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: "#121212",
+    borderTopWidth: 1,
+    borderTopColor: "#333",
+  },
+  startButton: {
+    backgroundColor: "#7B1FA2",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 10,
+    elevation: 5,
+  },
+  completedButton: {
+    backgroundColor: "#2E7D32",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 10,
+    opacity: 0.8,
+  },
+  btnText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
 });
